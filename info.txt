@@ -1,0 +1,22 @@
+關鍵技術設計 (Key Technical Design)
+手勢偵測 (Gesture Detection)：
+
+使用 MediaPipe Hands CDN 載入模型。
+開掌偵測 (Open Hand)：計算各手指尖端（Thumb 4, Index 8, Middle 12, Ring 16, Pinky 20）到手腕（0）的距離。若大於對應關節（如 PIP 關節）到手腕的距離，則判定為伸直。若有 4 隻以上手指伸直，判定為開掌。
+握拳偵測 (Fist)：若有 3 隻以上手指的尖端到手腕距離小於其對應節點（PIP/MCP），判定為握拳。
+座標對齊：將手掌中心（由 Wrist 0、Index MCP 5、Pinky MCP 17 的均值計算）的 Normalized 座標（0~1）映射至瀏覽器視窗大小，作為抓取判定的中心點。
+畫面渲染與動畫 (Rendering & Animations)：
+
+背景 Canvas：繪製攝影機鏡頭（左右鏡像翻轉，提升直覺度）以及炫彩霓虹的手骨架（Cyberpunk/Neon 科技感）。
+前端 DOM 掉落物：使用 HTML div 與 CSS 動畫渲染掉落物。掉落物可選擇不同主題（如：可愛貓咪 GIF、經典 Emoji、像素怪物、自訂網址）。
+粒子特效 (Particles)：當成功抓取時，在手掌中心產生發光粒子爆炸，並彈出 +10 或 Combo! 的浮動文字。
+音效系統 (Audio System)：
+
+使用 Web Audio API 即時合成音效（無須載入外部音訊檔案，速度極快）：
+召喚音效（開掌）：輕微的合成器上升音。
+抓取音效（握拳得分）：清脆的復古 8-bit 得分音。
+遊戲結束/開始：合成的和弦音。
+美化設計 (Premium Aesthetics)：
+
+採用 Glassmorphism (玻璃擬態) 的 UI 面板（磨砂玻璃背景、霓虹漸層邊框、流光發光特效）。
+包含「開始遊戲」、「難度選擇」、「主題切換」與「排行榜/最高分」等完整功能。

@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CYBER GRAB — 手勢抓寶挑戰</title>
+  <!-- SEO Meta Tags -->
+  <meta name="description" content="一款基於 MediaPipe 手勢識別的網頁互動遊戲。五指張開召喚落物，握拳抓取獲得分數！支援多種視覺主題與 8-bit 即時合成音效。">
+  <meta name="keywords" content="MediaPipe, 手勢辨識, 網頁遊戲, HTML5, Canvas, Web Audio API, Cyberpunk">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✊</text></svg>">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- MediaPipe CDNs -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+
+  <!-- Main Container -->
+  <main class="app-container" id="app-root">
+    
+    <!-- Header -->
+    <header class="game-header">
+      <h1 class="logo-text" id="main-title">CYBER<span class="highlight">GRAB</span> <span class="version">v1.0</span></h1>
+      <p class="tagline">AI 手勢辨識 &nbsp;×&nbsp; 互動抓取遊戲</p>
+    </header>
+
+    <div class="game-grid">
+      
+      <!-- Left Panel: Stats & HUD -->
+      <section class="panel panel-left" id="stats-panel">
+        <div class="panel-header">
+          <span class="panel-dot"></span>
+          <h2>HUD STATS</h2>
+        </div>
+        <div class="panel-body">
+          <div class="stat-box" id="score-box">
+            <span class="stat-label">當前分數 SCORE</span>
+            <div class="stat-value neon-blue" id="current-score">0000</div>
+          </div>
+          
+          <div class="stat-box" id="combo-box">
+            <span class="stat-label">連擊 COMBO</span>
+            <div class="stat-value neon-pink" id="combo-multiplier">x1</div>
+            <div class="combo-bar-container">
+              <div class="combo-bar" id="combo-progress"></div>
+            </div>
+          </div>
+
+          <div class="stat-box" id="high-score-box">
+            <span class="stat-label">最高紀錄 HIGH SCORE</span>
+            <div class="stat-value neon-green" id="high-score">0000</div>
+          </div>
+
+          <div class="game-timer-container">
+            <span class="stat-label">剩餘時間 TIMER</span>
+            <div class="timer-display" id="game-timer">60s</div>
+            <div class="timer-bar-container">
+              <div class="timer-bar" id="timer-progress"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Center Panel: The Game Screen -->
+      <section class="game-screen-wrapper" id="game-screen-wrapper">
+        <div class="screen-border-effect" id="screen-border"></div>
+        <div class="game-screen" id="game-viewport">
+          
+          <!-- Webcam Video (Hidden, processed by Canvas) -->
+          <video id="webcam" autoplay playsinline muted></video>
+          
+          <!-- Game Canvas for mirroring camera and drawing hand bones -->
+          <canvas id="game-canvas"></canvas>
+          
+          <!-- CRT Scanline Overlay -->
+          <div class="scanline-overlay"></div>
+          
+          <!-- Screen catch flash effect -->
+          <div id="screen-flash"></div>
+          
+          <!-- Falling items container (DOM overlay for beautiful CSS transitions and GIFs) -->
+          <div id="falling-items-container"></div>
+          
+          <!-- Grab pointer indicator (glowing crosshair at palm center) -->
+          <div id="hand-pointer" class="pointer-hidden">
+            <div class="ring outer-ring"></div>
+            <div class="ring inner-ring"></div>
+            <div class="dot"></div>
+          </div>
+
+          <!-- Loading Screen Overlay -->
+          <div class="overlay active" id="loading-overlay">
+            <div class="loading-spinner"></div>
+            <div class="loading-text" id="loading-status">正在載入 MediaPipe 模組...</div>
+            <div class="loading-subtext">請確保網頁有相機存取權限</div>
+          </div>
+
+          <!-- Countdown Overlay -->
+          <div class="overlay" id="countdown-overlay">
+            <div class="countdown-display" id="countdown-number">3</div>
+          </div>
+
+
+          <!-- Start Overlay -->
+          <div class="overlay" id="start-overlay">
+            <div class="welcome-box">
+              <h2 class="neon-text">CYBER GRAB</h2>
+              <p class="desc">這是一個結合 AI 視覺的肢體互動小遊戲！</p>
+              
+              <div class="instruction-cards">
+                <div class="card">
+                  <div class="card-icon">🖐️</div>
+                  <h3>五指張開</h3>
+                  <p>從畫面上方隨機掉落寶物</p>
+                </div>
+                <div class="card">
+                  <div class="card-icon">✊</div>
+                  <h3>握緊拳頭</h3>
+                  <p>移至寶物位置以進行抓取</p>
+                </div>
+              </div>
+              
+              <button class="btn btn-primary" id="btn-start-game">啟動系統 // SYSTEM START</button>
+            </div>
+          </div>
+
+          <!-- Game Over Overlay -->
+          <div class="overlay" id="game-over-overlay">
+            <div class="game-over-box">
+              <h2 class="neon-text-red">系統終止 // GAME OVER</h2>
+              <div class="final-score-display">
+                <p>最終得分 FINAL SCORE</p>
+                <div class="score-num" id="final-score-value">0</div>
+                <p id="new-high-score-msg" class="new-record-tag hidden">🎉 新的紀錄！ NEW RECORD 🎉</p>
+              </div>
+              <div class="game-over-actions">
+                <button class="btn btn-primary" id="btn-restart">重新載入 // REBOOT</button>
+                <button class="btn btn-secondary" id="btn-game-over-leaderboard" style="border-color: var(--neon-yellow); color: var(--neon-yellow);">🏆 排行榜</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Right Panel: Configurations -->
+      <section class="panel panel-right" id="config-panel">
+        <div class="panel-header">
+          <span class="panel-dot"></span>
+          <h2>CONTROL</h2>
+        </div>
+        <div class="panel-body">
+          <!-- Gesture Status HUD -->
+          <div class="control-group">
+            <span class="stat-label">手勢辨識狀態 GESTURE DETECTED</span>
+            <div class="gesture-status-badge unknown" id="gesture-badge">
+              <span id="gesture-emoji">❓</span> <span id="gesture-text">未偵測到手部</span>
+            </div>
+          </div>
+
+          <!-- Theme Select -->
+          <div class="control-group">
+            <label class="stat-label" for="theme-select">掉落物主題 SELECT THEME</label>
+            <select id="theme-select" class="cyber-select">
+              <option value="animated_svg">✨ 科幻霓虹 (動態 SVG)</option>
+              <option value="cute_emoji">🐱 可愛表情 (Emoji)</option>
+              <option value="pixel_art">👾 復古像素 (Pixel Monsters)</option>
+              <option value="custom">🔗 自訂 GIF 連結 (Custom URL)</option>
+            </select>
+          </div>
+
+          <!-- Custom GIF inputs (Hidden unless custom is chosen) -->
+          <div id="custom-gif-group" class="control-group hidden-anim">
+            <label class="stat-label" for="custom-gif-url">GIF 圖片網址 URL</label>
+            <input type="url" id="custom-gif-url" class="cyber-input" placeholder="https://.../image.gif" value="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbnlhMDMxeTZnaTZsMDkwYWYxajR5MDd6Nmp2MGptNDJxb3ZtbWh3MCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/WNJ06H3d1kH6Gj7G6B/giphy.gif">
+            <p class="input-tip">貼上透明背景 GIF / PNG 網址可取得最佳效果</p>
+          </div>
+
+          <!-- Difficulty Select -->
+          <div class="control-group">
+            <label class="stat-label" for="difficulty-select">遊戲難度 DIFFICULTY</label>
+            <select id="difficulty-select" class="cyber-select">
+              <option value="easy">簡單 // EASY (重力慢)</option>
+              <option value="medium" selected>普通 // MEDIUM (標準速度)</option>
+              <option value="hard">困難 // HARD (快速下落)</option>
+            </select>
+          </div>
+
+          <!-- Sound Options -->
+          <div class="control-group">
+            <div class="toggle-container">
+              <span class="stat-label">音效系統 SOUND EFFECTS</span>
+              <label class="switch">
+                <input type="checkbox" id="sound-toggle" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Camera Selection -->
+          <div class="control-group">
+            <label class="stat-label" for="camera-select">選擇相機 CAMERA SOURCE</label>
+            <select id="camera-select" class="cyber-select">
+              <option value="">載入相機中...</option>
+            </select>
+          </div>
+          
+          <button class="btn btn-secondary btn-full" id="btn-calibrate">重置相機與追蹤 // RESET</button>
+          <button class="btn btn-secondary btn-full" id="btn-leaderboard" style="border-color: var(--neon-yellow); color: var(--neon-yellow);">🏆 排行榜 // LEADERBOARD</button>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Instruction Bar -->
+    <footer class="instruction-bar">
+      <div class="console-icon">▶</div>
+      <div class="terminal-text" id="system-console-msg">系統初始化成功。請開啟攝影機以開始手勢控制。</div>
+    </footer>
+  </main>
+  
+
+  <!-- Leaderboard Modal -->
+  <div id="leaderboard-modal">
+    <div class="leaderboard-box">
+      <div>
+        <h2 class="leaderboard-title">🏆 排行榜</h2>
+        <p class="leaderboard-subtitle">HALL OF FAME // TOP 5 RECORDS</p>
+      </div>
+      <div class="leaderboard-list" id="leaderboard-list">
+        <div class="lb-empty">尚無記錄。去挑戰吧！</div>
+      </div>
+      <div class="lb-actions">
+        <button class="btn btn-secondary" id="btn-lb-clear" style="border-color: var(--neon-red); color: var(--neon-red);">清除記錄</button>
+        <button class="btn btn-primary" id="btn-lb-close">關閉 // CLOSE</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
