@@ -18,7 +18,8 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
   
-  <link rel="stylesheet" href="style.css">
+  <!-- ?v= 版本號：改檔案時順手加 1，瀏覽器就不會吃到舊快取 -->
+  <link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 
@@ -28,8 +29,16 @@
     
     <!-- Header -->
     <header class="game-header">
-      <h1 class="logo-text" id="main-title">CYBER<span class="highlight">GRAB</span> <span class="version">v1.0</span></h1>
-      <p class="tagline">AI 手勢辨識 &nbsp;×&nbsp; 互動抓取遊戲</p>
+      <h1 class="logo-text" id="main-title">CYBER<span class="highlight">GRAB</span> <span class="version">v1.5</span></h1>
+      <div class="header-right">
+        <p class="tagline">AI 手勢辨識 &nbsp;×&nbsp; 互動抓取遊戲</p>
+        <button class="settings-btn" id="btn-settings" aria-label="開啟設定" title="設定 SETTINGS">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+      </div>
     </header>
 
     <div class="game-grid">
@@ -54,17 +63,17 @@
             </div>
           </div>
 
-          <div class="stat-box" id="high-score-box">
-            <span class="stat-label">最高紀錄 HIGH SCORE</span>
-            <div class="stat-value neon-green" id="high-score">0000</div>
-          </div>
-
           <div class="game-timer-container">
             <span class="stat-label">剩餘時間 TIMER</span>
             <div class="timer-display" id="game-timer">60s</div>
             <div class="timer-bar-container">
               <div class="timer-bar" id="timer-progress"></div>
             </div>
+          </div>
+
+          <div class="stat-box" id="high-score-box">
+            <span class="stat-label">最高紀錄 HIGH SCORE</span>
+            <div class="stat-value neon-green" id="high-score">0000</div>
           </div>
         </div>
       </section>
@@ -123,8 +132,8 @@
                 </div>
                 <div class="card">
                   <div class="card-icon">✊</div>
-                  <h3>握緊拳頭</h3>
-                  <p>移至寶物位置以進行抓取</p>
+                  <h3>握拳抓取</h3>
+                  <p>握拳碰到寶物得分，小心紅色炸藥會扣分！</p>
                 </div>
               </div>
               
@@ -151,12 +160,28 @@
         </div>
       </section>
 
-      <!-- Right Panel: Configurations -->
-      <section class="panel panel-right" id="config-panel">
-        <div class="panel-header">
-          <span class="panel-dot"></span>
-          <h2>CONTROL</h2>
-        </div>
+    </div>
+
+    <!-- Instruction Bar -->
+    <footer class="instruction-bar">
+      <div class="console-icon">▶</div>
+      <div class="terminal-text" id="system-console-msg">系統初始化成功。請開啟攝影機以開始手勢控制。</div>
+    </footer>
+  </main>
+
+  <!-- Settings Modal (was the right panel) -->
+  <div id="settings-modal">
+    <section class="panel panel-right" id="config-panel">
+      <div class="panel-header">
+        <span class="panel-dot"></span>
+        <h2>CONTROL // 設定</h2>
+        <button class="modal-close-btn" id="btn-settings-close" aria-label="關閉設定" title="關閉">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+            <line x1="5" y1="5" x2="19" y2="19"></line>
+            <line x1="19" y1="5" x2="5" y2="19"></line>
+          </svg>
+        </button>
+      </div>
         <div class="panel-body">
           <!-- Gesture Status HUD -->
           <div class="control-group">
@@ -170,18 +195,11 @@
           <div class="control-group">
             <label class="stat-label" for="theme-select">掉落物主題 SELECT THEME</label>
             <select id="theme-select" class="cyber-select">
-              <option value="animated_svg">✨ 科幻霓虹 (動態 SVG)</option>
-              <option value="cute_emoji">🐱 可愛表情 (Emoji)</option>
-              <option value="pixel_art">👾 復古像素 (Pixel Monsters)</option>
-              <option value="custom">🔗 自訂 GIF 連結 (Custom URL)</option>
+              <option value="animated_svg">科幻霓虹 // DEMO</option>
+              <option value="cute_emoji">主題 A // THEME A</option>
+              <option value="pixel_art">主題 B // THEME B</option>
+              <option value="custom">主題 C // THEME C</option>
             </select>
-          </div>
-
-          <!-- Custom GIF inputs (Hidden unless custom is chosen) -->
-          <div id="custom-gif-group" class="control-group hidden-anim">
-            <label class="stat-label" for="custom-gif-url">GIF 圖片網址 URL</label>
-            <input type="url" id="custom-gif-url" class="cyber-input" placeholder="https://.../image.gif" value="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbnlhMDMxeTZnaTZsMDkwYWYxajR5MDd6Nmp2MGptNDJxb3ZtbWh3MCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/WNJ06H3d1kH6Gj7G6B/giphy.gif">
-            <p class="input-tip">貼上透明背景 GIF / PNG 網址可取得最佳效果</p>
           </div>
 
           <!-- Difficulty Select -->
@@ -189,8 +207,18 @@
             <label class="stat-label" for="difficulty-select">遊戲難度 DIFFICULTY</label>
             <select id="difficulty-select" class="cyber-select">
               <option value="easy">簡單 // EASY (重力慢)</option>
-              <option value="medium" selected>普通 // MEDIUM (標準速度)</option>
-              <option value="hard">困難 // HARD (快速下落)</option>
+              <option value="medium">普通 // MEDIUM (標準速度)</option>
+              <option value="hard" selected>困難 // HARD (快速下落)</option>
+            </select>
+          </div>
+
+          <!-- Game Duration Select -->
+          <div class="control-group">
+            <label class="stat-label" for="duration-select">遊戲時間 GAME TIME</label>
+            <select id="duration-select" class="cyber-select">
+              <option value="30">30 秒 // SHORT</option>
+              <option value="60" selected>60 秒 // STANDARD</option>
+              <option value="90">90 秒 // LONG</option>
             </select>
           </div>
 
@@ -212,21 +240,20 @@
               <option value="">載入相機中...</option>
             </select>
           </div>
-          
+
+          <!-- Game Log -->
+          <div class="control-group">
+            <span class="stat-label">遊戲紀錄 GAME LOG</span>
+            <div class="game-log-list" id="game-log-list">
+              <div class="log-empty">尚無紀錄</div>
+            </div>
+          </div>
+
           <button class="btn btn-secondary btn-full" id="btn-calibrate">重置相機與追蹤 // RESET</button>
           <button class="btn btn-secondary btn-full" id="btn-leaderboard" style="border-color: var(--neon-yellow); color: var(--neon-yellow);">🏆 排行榜 // LEADERBOARD</button>
-        </div>
-      </section>
-
-    </div>
-
-    <!-- Instruction Bar -->
-    <footer class="instruction-bar">
-      <div class="console-icon">▶</div>
-      <div class="terminal-text" id="system-console-msg">系統初始化成功。請開啟攝影機以開始手勢控制。</div>
-    </footer>
-  </main>
-  
+      </div>
+    </section>
+  </div>
 
   <!-- Leaderboard Modal -->
   <div id="leaderboard-modal">
@@ -245,6 +272,6 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>

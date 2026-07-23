@@ -1,0 +1,8 @@
+# 系統垃圾檔
+.DS_Store
+
+# 原始美術檔不上公開 repo（遊戲只需要 public/images/ 的 webp）
+public/原始圖檔/
+public/圖層*.png
+public/works.csv
+public/works.json

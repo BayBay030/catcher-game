@@ -159,6 +159,7 @@ let isPlaying = false;
 let score = 0;
 let highScore = parseInt(localStorage.getItem('cybergrab_high_score') || '0', 10);
 let timer = 60;
+let gameDuration = 60; // seconds per round: 30 / 60 / 90 (set in settings)
 let timerInterval = null;
 
 // Leaderboard (Top 5 stored in localStorage)
@@ -206,6 +207,45 @@ function renderLeaderboard() {
   `).join('');
 }
 
+// Game Log (every round: time, round number, score — shown in settings)
+const GAME_LOG_KEY = 'cybergrab_game_log';
+const ROUND_COUNT_KEY = 'cybergrab_round_count';
+
+function getGameLog() {
+  try {
+    return JSON.parse(localStorage.getItem(GAME_LOG_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function saveGameLog(finalScore) {
+  const round = parseInt(localStorage.getItem(ROUND_COUNT_KEY) || '0', 10) + 1;
+  localStorage.setItem(ROUND_COUNT_KEY, round);
+  const now = new Date();
+  const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const log = getGameLog();
+  log.unshift({ round, time, score: finalScore });
+  // Keep the latest 30 rounds
+  localStorage.setItem(GAME_LOG_KEY, JSON.stringify(log.slice(0, 30)));
+}
+
+function renderGameLog() {
+  const listEl = document.getElementById('game-log-list');
+  const log = getGameLog();
+  if (log.length === 0) {
+    listEl.innerHTML = '<div class="log-empty">尚無紀錄</div>';
+    return;
+  }
+  listEl.innerHTML = log.map(entry => `
+    <div class="log-row">
+      <span class="log-time">${entry.time}</span>
+      <span class="log-round">第 ${entry.round} 回</span>
+      <span class="log-score">${entry.score} 分</span>
+    </div>
+  `).join('');
+}
+
 function openLeaderboard() {
   renderLeaderboard();
   document.getElementById('leaderboard-modal').classList.add('active');
@@ -222,11 +262,12 @@ const COMBO_DURATION = 1500; // 1.5s to keep combo
 let lastCatchTime = 0;
 
 // Game Configs
-let difficulty = 'medium'; // easy, medium, hard
+let difficulty = 'hard'; // easy, medium, hard (default: hard)
 let spawnRate = 800; // ms between spawns
 let baseGravity = 2.5; // falling speed multiplier
-let activeTheme = 'animated_svg'; // animated_svg, cute_emoji, pixel_art, custom
-let customGifUrl = "";
+let activeTheme = 'animated_svg'; // animated_svg (DEMO), cute_emoji (A), pixel_art (B), custom (C)
+// Theme C: fixed GIF asset (the old custom-URL slot, now a preset)
+let customGifUrl = "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbnlhMDMxeTZnaTZsMDkwYWYxajR5MDd6Nmp2MGptNDJxb3ZtbWh3MCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/WNJ06H3d1kH6Gj7G6B/giphy.gif";
 
 // Video & Drawing Canvas variables
 let videoElement;
@@ -244,6 +285,7 @@ let rawHandX = 0;
 let rawHandY = 0;
 let smoothHandX = 0;
 let smoothHandY = 0;
+let handPoints = []; // all 21 hand landmark screen positions (the red skeleton)
 let isHandPresent = false;
 let currentGesture = 'unknown'; // 'unknown', 'open', 'fist'
 let lastGesture = 'unknown';
@@ -262,6 +304,74 @@ const SVGTemplates = {
 };
 
 const EmojiThemeList = ['🐱', '🍓', '🎮', '⭐️', '🎈', '🍩', '🥑', '👾', '🌈', '🍦'];
+
+// Item-dropping ship: uses 1.webp if present, falls back to a built-in saucer SVG
+const ShipSVG = `<svg viewBox="0 0 64 32" style="width:100%;height:100%;">
+  <ellipse cx="32" cy="21" rx="30" ry="9" fill="#2E4FD8" stroke="#1A1512" stroke-width="2"/>
+  <ellipse cx="32" cy="12" rx="14" ry="9" fill="#F09CCB" stroke="#1A1512" stroke-width="2"/>
+  <circle cx="14" cy="21" r="2.5" fill="#FFB020"/>
+  <circle cx="32" cy="24" r="2.5" fill="#FFB020"/>
+  <circle cx="50" cy="21" r="2.5" fill="#FFB020"/>
+</svg>`;
+
+let shipEl = null;
+let shipX = 0.5;        // normalized 0~1 across the game viewport
+let shipBottomPx = 176; // ship belly line inside the viewport — items drop from here
+
+const SHIP_HEIGHT = 336;      // rendered ship height (grows upward from the belly line)
+const DROP_LINE_MIN = 176;    // highest belly line (same baseline as before the upscale)
+
+function createShip() {
+  shipEl = document.createElement('div');
+  shipEl.id = 'game-ship';
+  const img = document.createElement('img');
+  img.src = 'public/images/1.webp';
+  img.alt = '';
+  img.onerror = () => { shipEl.innerHTML = ShipSVG; };
+  shipEl.appendChild(img);
+  // Lives on the page top layer (fixed) so it can overflow the game frame
+  document.body.appendChild(shipEl);
+  scheduleShipTeleport();
+}
+
+// Blink-teleport: jump to a random spot; the ship belly (= drop line) stays
+// within the top third of the screen so players can't camp under the ship.
+// The oversized body floats above the game frame, overflowing it freely.
+function teleportShip() {
+  if (!shipEl || viewportWidth <= 0) return;
+  shipX = 0.08 + Math.random() * 0.84;
+  const bottomMax = Math.max(DROP_LINE_MIN, viewportHeight / 3);
+  shipBottomPx = DROP_LINE_MIN + Math.random() * (bottomMax - DROP_LINE_MIN);
+
+  // Convert viewport-local coords to page coords (ship is position: fixed)
+  const rect = document.getElementById('game-viewport').getBoundingClientRect();
+  shipEl.style.left = `${rect.left + shipX * viewportWidth}px`;
+  shipEl.style.top = `${rect.top + shipBottomPx - SHIP_HEIGHT}px`;
+
+  // Flicker effect on arrival
+  shipEl.classList.remove('blink');
+  void shipEl.offsetWidth;
+  shipEl.classList.add('blink');
+}
+
+function scheduleShipTeleport() {
+  teleportShip();
+  setTimeout(scheduleShipTeleport, 700 + Math.random() * 1300);
+}
+
+// Bonus items 2/3/4.webp: rarer than bombs, worth +30
+const BONUS_VALUE = 30;
+const BonusWebpList = ['public/images/2.webp', 'public/images/3.webp', 'public/images/4.webp'];
+
+// Penalty bomb (appears in every theme, ratio 4 normal : 1 bomb)
+const BOMB_PENALTY = -30;
+const BombSVG = `<svg viewBox="0 0 24 24" style="width:100%;height:100%;">
+  <circle cx="11" cy="14" r="8.5" fill="#1A1512" stroke="#D63030" stroke-width="1.5"/>
+  <rect x="9.8" y="4.2" width="2.6" height="3.2" rx="0.6" fill="#6B6560"/>
+  <path d="M12.8 4.6 C14.2 2.4, 16.4 3.6, 17.4 2.2" stroke="#E07020" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+  <circle cx="18" cy="1.9" r="1.4" fill="#FFB020"/>
+  <circle cx="8.2" cy="11.4" r="2" fill="rgba(255,255,255,0.22)"/>
+</svg>`;
 
 // Retro pixel art invaders drawn via SVG paths
 const PixelThemeList = [
@@ -314,6 +424,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initialize MediaPipe Hands
   initMediaPipe();
+
+  // Item-dropping ship at the top of the screen
+  createShip();
 });
 
 // Setup DOM Event Listeners
@@ -332,24 +445,19 @@ function setupEventListeners() {
 
   // Theme change
   const themeSelect = document.getElementById('theme-select');
-  const customGroup = document.getElementById('custom-gif-group');
   themeSelect.addEventListener('change', (e) => {
     activeTheme = e.target.value;
-    if (activeTheme === 'custom') {
-      customGroup.classList.remove('hidden-anim');
-      customGroup.classList.add('show-anim');
-    } else {
-      customGroup.classList.remove('show-anim');
-      customGroup.classList.add('hidden-anim');
-    }
     updateSystemConsole(`主題切換為：${themeSelect.options[themeSelect.selectedIndex].text}`);
   });
 
-  // Custom GIF URL input
-  const gifUrlInput = document.getElementById('custom-gif-url');
-  customGifUrl = gifUrlInput.value;
-  gifUrlInput.addEventListener('input', (e) => {
-    customGifUrl = e.target.value;
+  // Game duration change (30 / 60 / 90 seconds)
+  const durationSelect = document.getElementById('duration-select');
+  durationSelect.addEventListener('change', (e) => {
+    gameDuration = parseInt(e.target.value, 10);
+    if (!isPlaying) {
+      document.getElementById('game-timer').textContent = `${gameDuration}s`;
+    }
+    updateSystemConsole(`遊戲時間已設為 ${gameDuration} 秒`);
   });
 
   // Difficulty change
@@ -414,6 +522,21 @@ function setupEventListeners() {
   document.getElementById('leaderboard-modal').addEventListener('click', (e) => {
     if (e.target === document.getElementById('leaderboard-modal')) {
       closeLeaderboard();
+    }
+  });
+
+  // Settings modal (gear icon top-right)
+  const settingsModal = document.getElementById('settings-modal');
+  document.getElementById('btn-settings').addEventListener('click', () => {
+    renderGameLog();
+    settingsModal.classList.add('active');
+  });
+  document.getElementById('btn-settings-close').addEventListener('click', () => {
+    settingsModal.classList.remove('active');
+  });
+  settingsModal.addEventListener('click', (e) => {
+    if (e.target === settingsModal) {
+      settingsModal.classList.remove('active');
     }
   });
 }
@@ -603,6 +726,12 @@ function onHandResults(results) {
     rawHandX = (1 - palmX) * viewportWidth;
     rawHandY = palmY * viewportHeight;
 
+    // Store all landmark screen positions for touch-catch collision
+    handPoints = landmarks.map(pt => ({
+      x: (1 - pt.x) * viewportWidth,
+      y: pt.y * viewportHeight
+    }));
+
     if (!smoothHandX && !smoothHandY) {
       smoothHandX = rawHandX;
       smoothHandY = rawHandY;
@@ -630,6 +759,7 @@ function onHandResults(results) {
   } else {
     isHandPresent = false;
     currentGesture = 'unknown';
+    handPoints = [];
     document.getElementById('hand-pointer').className = 'pointer-hidden';
     updateGestureHUD();
   }
@@ -837,7 +967,7 @@ function runCountdown(onComplete) {
 function startGame() {
   // Reset score/ui immediately
   score = 0;
-  timer = 60;
+  timer = gameDuration;
   combo = 0;
   document.getElementById('current-score').textContent = formatScore(score);
   document.getElementById('combo-multiplier').textContent = 'x1';
@@ -869,7 +999,7 @@ function startGame() {
       timer--;
       document.getElementById('game-timer').textContent = `${timer}s`;
 
-      const progressWidth = (timer / 60) * 100;
+      const progressWidth = (timer / gameDuration) * 100;
       const timerBar = document.getElementById('timer-progress');
       timerBar.style.width = `${progressWidth}%`;
 
@@ -916,6 +1046,9 @@ function endGame() {
     saveToLeaderboard(score);
   }
 
+  // Log this round (time / round number / score)
+  saveGameLog(score);
+
   // Clear items remaining
   clearFallingItems();
 
@@ -943,18 +1076,32 @@ function spawnFallingItem() {
   itemEl.style.width = `${size}px`;
   itemEl.style.height = `${size}px`;
   
-  // Position
-  const xPercent = 10 + Math.random() * 80; // 10% to 90%
-  const x = (xPercent / 100) * viewportWidth;
-  const y = -size / 2;
-  
+  // Position: drop from the ship's belly line, at its current x
+  const x = shipEl ? (shipX * viewportWidth) : (0.1 + Math.random() * 0.8) * viewportWidth;
+  const y = (shipEl ? shipBottomPx : 0) + size / 2;
+
   itemEl.style.left = `${x}px`;
   itemEl.style.top = `${y}px`;
 
   // Item attributes
   let value = 10;
   let elementContent = "";
+  let isBonus = false;
 
+  // Spawn roll — bomb 20%, bonus (2/3/4.webp) 10%, otherwise theme item
+  const roll = Math.random();
+  const isBomb = roll < 0.2;
+  isBonus = !isBomb && roll < 0.3;
+  if (isBomb) {
+    elementContent = BombSVG;
+    value = BOMB_PENALTY;
+    itemEl.classList.add('bomb');
+  } else if (isBonus) {
+    const bonusSrc = BonusWebpList[Math.floor(Math.random() * BonusWebpList.length)];
+    elementContent = `<img src="${bonusSrc}" alt="">`;
+    value = BONUS_VALUE;
+    itemEl.classList.add('bonus');
+  } else
   // Dynamic Theme content injection
   if (activeTheme === 'animated_svg') {
     const keys = Object.keys(SVGTemplates);
@@ -977,7 +1124,13 @@ function spawnFallingItem() {
   }
 
   itemEl.innerHTML = elementContent;
-  
+
+  // Bonus webp not in the folder yet → fall back to the star SVG
+  if (isBonus) {
+    const bonusImg = itemEl.querySelector('img');
+    if (bonusImg) bonusImg.onerror = () => { itemEl.innerHTML = SVGTemplates.star; };
+  }
+
   // Add CSS swaying animation randomly to simulate dynamic floating
   if (Math.random() > 0.5) {
     itemEl.style.animation = `sway ${2 + Math.random() * 2}s ease-in-out infinite`;
@@ -993,6 +1146,7 @@ function spawnFallingItem() {
     size: size,
     speed: (1.5 + Math.random() * 2) * baseGravity,
     value: value,
+    isBomb: isBomb,
     element: itemEl,
     swaySpeed: 0.02 + Math.random() * 0.03,
     swayAmount: 1 + Math.random() * 2,
@@ -1037,17 +1191,19 @@ function updateGameLogic() {
     item.element.style.left = `${item.x}px`;
     item.element.style.top = `${item.y}px`;
 
-    // Check collision grab condition
+    // Check collision grab condition:
+    // fist required — any point of the hand skeleton touching the item while
+    // making a fist scores; an open hand only summons, touching does nothing
     let grabbed = false;
-    
-    if (isHandPresent && currentGesture === 'fist') {
-      // Calculate 2D distance between smooth hand pointer and falling item center
-      const distance = Math.hypot(smoothHandX - item.x, smoothHandY - item.y);
-      const grabRadius = 45; // effective size of palm grab range
-      const triggerDistance = (item.size / 2) + grabRadius;
-      
-      if (distance < triggerDistance) {
-        grabbed = true;
+
+    if (isHandPresent && currentGesture === 'fist' && handPoints.length > 0) {
+      const touchPad = 10; // small forgiveness margin around the item
+      const triggerDistance = (item.size / 2) + touchPad;
+      for (const pt of handPoints) {
+        if (Math.hypot(pt.x - item.x, pt.y - item.y) < triggerDistance) {
+          grabbed = true;
+          break;
+        }
       }
     }
 
@@ -1073,6 +1229,28 @@ function updateGameLogic() {
 
 // Catch Event handling: award score, explode particles, sound alerts
 function handleItemGrab(item) {
+  // Bomb caught: deduct points, reset combo (score never drops below 0)
+  if (item.isBomb) {
+    combo = 0;
+    document.getElementById('combo-multiplier').textContent = 'x1';
+    document.getElementById('combo-multiplier').className = 'stat-value neon-pink';
+    document.getElementById('combo-progress').style.width = '0%';
+
+    score = Math.max(0, score + item.value); // value is negative
+    document.getElementById('current-score').textContent = formatScore(score);
+
+    synth.playMiss();
+    createFloatingText(item.x, item.y, `${item.value}`, false, true);
+    triggerScreenFlash('red');
+
+    item.element.classList.add('catching-effect');
+    createParticleExplosion(item.x, item.y);
+    setTimeout(() => {
+      item.element.remove();
+    }, 300);
+    return;
+  }
+
   // Update combos
   combo++;
   lastCatchTime = Date.now();
@@ -1117,10 +1295,10 @@ function handleItemGrab(item) {
 }
 
 // UI Element: Create Floating Drift-Up Text
-function createFloatingText(x, y, text, isCombo) {
+function createFloatingText(x, y, text, isCombo, isPenalty = false) {
   const container = document.getElementById('falling-items-container');
   const txtEl = document.createElement('div');
-  txtEl.className = 'floating-text' + (isCombo ? ' combo' : '');
+  txtEl.className = 'floating-text' + (isCombo ? ' combo' : '') + (isPenalty ? ' penalty' : '');
   txtEl.style.left = `${x}px`;
   txtEl.style.top = `${y}px`;
   txtEl.textContent = text;
@@ -1189,8 +1367,9 @@ function triggerScreenFlash(colorType = 'cyan') {
   const flashEl = document.getElementById('screen-flash');
   if (!flashEl) return;
   // Remove existing animation class to restart it
-  flashEl.classList.remove('flash-cyan', 'flash-pink');
+  flashEl.classList.remove('flash-cyan', 'flash-pink', 'flash-red');
   // Force reflow so animation restarts cleanly
   void flashEl.offsetWidth;
-  flashEl.classList.add(colorType === 'pink' ? 'flash-pink' : 'flash-cyan');
+  const cls = colorType === 'pink' ? 'flash-pink' : (colorType === 'red' ? 'flash-red' : 'flash-cyan');
+  flashEl.classList.add(cls);
 }
