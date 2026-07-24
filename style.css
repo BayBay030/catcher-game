@@ -187,7 +187,7 @@ body::before {
    ============================================================ */
 .game-grid {
   display: grid;
-  grid-template-columns: 290px 1fr;
+  grid-template-columns: 290px 1fr 210px;
   gap: 16px;
   flex-grow: 1;
   align-items: stretch;
@@ -396,8 +396,6 @@ body::before {
   position: relative;
   border: var(--border);
   box-shadow: var(--shadow-lg);
-  /* Bleed past the container's right padding so the screen touches the page edge */
-  margin-right: -20px;
   /* Height follows the browser window (grid stretch); no fixed ratio on desktop */
   min-height: 0;
   background-color: var(--ink);
@@ -804,6 +802,89 @@ body::before {
 }
 
 /* ============================================================
+   Scoring Legend (right panel — narrower than the left)
+   ============================================================ */
+.panel-legend {
+  padding: 16px 14px;
+  gap: 10px;
+}
+
+.panel-legend::before { background: var(--blue); }
+.panel-legend .panel-dot { background: var(--blue); }
+
+.legend-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-grow: 1;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border: var(--border-thin);
+  background: var(--bg);
+}
+
+.legend-row.plus  { border-color: #1DA462; background: #EAF7EF; }
+.legend-row.minus { border-color: var(--danger-color); background: #FBEAEA; }
+
+.legend-icon {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.legend-icon img,
+.legend-icon svg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.legend-text {
+  flex-grow: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.legend-name {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.legend-val {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  letter-spacing: 1px;
+}
+
+.legend-val.plus  { color: #1DA462; }
+.legend-val.minus { color: var(--danger-color); }
+
+.legend-tip {
+  margin-top: auto;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.7;
+  color: rgba(26,21,18,0.5);
+  border-top: var(--border-thin);
+  padding-top: 10px;
+}
+
+@media (max-width: 1100px) {
+  .panel-legend { order: 3; }
+}
+
+/* ============================================================
    Game Log (inside settings)
    ============================================================ */
 .game-log-list {
@@ -1020,6 +1101,90 @@ input:checked + .slider:before {
   40%  { opacity: 1; }
   60%  { opacity: 0.25; }
   100% { opacity: 1; }
+}
+
+/* ============================================================
+   Theme Mascot (A/B/C) — sits in the bottom-right corner
+   ============================================================ */
+#game-mascot {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  width: 225px;
+  height: 225px;
+  z-index: 3;
+  pointer-events: none;
+  transform-origin: bottom center;
+  animation: mascot-bob 1.3s ease-in-out infinite;
+}
+
+/* Random speech bubble beside the mascot */
+#mascot-bubble {
+  position: absolute;
+  right: 200px;
+  bottom: 180px;
+  max-width: 160px;
+  background: var(--white);
+  border: var(--border-thin);
+  box-shadow: var(--shadow-sm);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-family: var(--font-main);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.3;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(6px) scale(0.85);
+  transform-origin: bottom right;
+  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+#mascot-bubble.show {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* little tail pointing toward the mascot (down-right) */
+#mascot-bubble::after {
+  content: '';
+  position: absolute;
+  right: 22px;
+  bottom: -9px;
+  width: 14px;
+  height: 14px;
+  background: var(--white);
+  border-right: var(--border-thin);
+  border-bottom: var(--border-thin);
+  transform: rotate(35deg);
+}
+
+#game-mascot img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(3px 4px 0 rgba(0,0,0,0.4));
+}
+
+/* Idle bounce */
+@keyframes mascot-bob {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50%      { transform: translateY(-12px) rotate(2deg); }
+}
+
+/* Throw jolt when a treasure is summoned (open hand) */
+#game-mascot.throw {
+  animation: mascot-throw 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
+             mascot-bob 1.3s ease-in-out infinite;
+}
+
+@keyframes mascot-throw {
+  0%   { transform: translateY(0) scale(1, 1) rotate(0deg); }
+  30%  { transform: translateY(4px) scale(1.15, 0.85) rotate(-6deg); }
+  60%  { transform: translateY(-18px) scale(0.9, 1.12) rotate(8deg); }
+  100% { transform: translateY(0) scale(1, 1) rotate(0deg); }
 }
 
 #game-ship img,

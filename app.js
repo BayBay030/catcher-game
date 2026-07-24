@@ -157,24 +157,39 @@ class AudioSynth {
 const synth = new AudioSynth();
 let isPlaying = false;
 let score = 0;
-let highScore = parseInt(localStorage.getItem('cybergrab_high_score') || '0', 10);
 let timer = 60;
 let gameDuration = 60; // seconds per round: 30 / 60 / 90 (set in settings)
 let timerInterval = null;
 
-// Leaderboard (Top 5 stored in localStorage)
-const LEADERBOARD_KEY = 'cybergrab_leaderboard';
+// Human-readable theme names (used in leaderboard headings & console)
+const THEME_NAMES = {
+  animated_svg: 'DEMO',
+  themeA: '主題 A',
+  themeB: '主題 B',
+  themeC: '主題 C'
+};
+function themeName(theme) { return THEME_NAMES[theme || activeTheme] || 'DEMO'; }
 
-function getLeaderboard() {
+// Per-theme high score
+function highKey(theme) { return `cybergrab_high_${theme || activeTheme}`; }
+function getHighScore(theme) { return parseInt(localStorage.getItem(highKey(theme)) || '0', 10); }
+function updateHighScoreDisplay() {
+  document.getElementById('high-score').textContent = formatScore(getHighScore());
+}
+
+// Per-theme leaderboard (Top 5 each, stored in localStorage)
+function lbKey(theme) { return `cybergrab_leaderboard_${theme || activeTheme}`; }
+
+function getLeaderboard(theme) {
   try {
-    return JSON.parse(localStorage.getItem(LEADERBOARD_KEY) || '[]');
+    return JSON.parse(localStorage.getItem(lbKey(theme)) || '[]');
   } catch {
     return [];
   }
 }
 
 function saveToLeaderboard(finalScore) {
-  const board = getLeaderboard();
+  const board = getLeaderboard(activeTheme);
   const entry = {
     score: finalScore,
     date: new Date().toLocaleDateString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -182,20 +197,24 @@ function saveToLeaderboard(finalScore) {
   board.push(entry);
   board.sort((a, b) => b.score - a.score);
   const top5 = board.slice(0, 5);
-  localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(top5));
+  localStorage.setItem(lbKey(activeTheme), JSON.stringify(top5));
   return top5;
 }
 
 function renderLeaderboard() {
-  const board = getLeaderboard();
+  const board = getLeaderboard(activeTheme);
   const listEl = document.getElementById('leaderboard-list');
   const rankEmojis = ['🥇', '🥈', '🥉', '4', '5'];
-  
+
+  // Show which theme's ranking this is
+  const subtitleEl = document.querySelector('.leaderboard-subtitle');
+  if (subtitleEl) subtitleEl.textContent = `${themeName(activeTheme)} // TOP 5 RECORDS`;
+
   if (board.length === 0) {
     listEl.innerHTML = '<div class="lb-empty">尚無記錄。去挑戰吧！</div>';
     return;
   }
-  
+
   listEl.innerHTML = board.map((entry, i) => `
     <div class="lb-row">
       <div class="lb-rank">${rankEmojis[i] || (i + 1)}</div>
@@ -363,6 +382,116 @@ function scheduleShipTeleport() {
 const BONUS_VALUE = 30;
 const BonusWebpList = ['public/images/2.webp', 'public/images/3.webp', 'public/images/4.webp'];
 
+// Theme config — DEMO uses the top ship + all 3 bonus webps.
+// Themes A/B/C are character-exclusive: one mascot in the bottom-right corner,
+// and the only bonus item that appears is that theme's own character webp.
+const THEME_CONFIG = {
+  animated_svg: { character: null },                    // DEMO
+  themeA:       { character: 'public/images/2.webp' },  // 角色 A
+  themeB:       { character: 'public/images/3.webp' },  // 角色 B
+  themeC:       { character: 'public/images/4.webp' }   // 角色 C
+};
+
+function isDemoTheme() { return activeTheme === 'animated_svg'; }
+
+// Bottom-right corner mascot for the A/B/C theme zones
+let mascotEl = null;
+let mascotBubbleEl = null;
+let bubbleHideTimer = null;
+
+// Random one-liners the mascot blurts out
+const MASCOT_LINES = [
+  '接住啊！', '手滑了唷～', '這顆給你', '小心有炸的', '再快一點嘛',
+  '哎呀沒接到', '寶物來囉', '別發呆', '手張開我就丟', '你行不行啊',
+  '差一點點', '穩住穩住', '看我的', '嘿咻！'
+];
+
+function createMascot() {
+  mascotEl = document.createElement('div');
+  mascotEl.id = 'game-mascot';
+  mascotEl.innerHTML = '<img alt="">';
+  mascotEl.style.display = 'none';
+  document.getElementById('game-viewport').appendChild(mascotEl);
+
+  mascotBubbleEl = document.createElement('div');
+  mascotBubbleEl.id = 'mascot-bubble';
+  document.getElementById('game-viewport').appendChild(mascotBubbleEl);
+
+  scheduleMascotBubble();
+}
+
+function showMascotBubble() {
+  if (!mascotBubbleEl || isDemoTheme() || !mascotEl || mascotEl.style.display === 'none') return;
+  mascotBubbleEl.textContent = MASCOT_LINES[Math.floor(Math.random() * MASCOT_LINES.length)];
+  mascotBubbleEl.classList.add('show');
+  clearTimeout(bubbleHideTimer);
+  bubbleHideTimer = setTimeout(() => mascotBubbleEl.classList.remove('show'), 2400);
+}
+
+// Periodically pop a random line while in a theme zone
+function scheduleMascotBubble() {
+  if (!isDemoTheme()) showMascotBubble();
+  setTimeout(scheduleMascotBubble, 3500 + Math.random() * 3000);
+}
+
+// Show the ship (DEMO) or the corner mascot (A/B/C), and set its image
+function applyThemeVisuals() {
+  const cfg = THEME_CONFIG[activeTheme] || THEME_CONFIG.animated_svg;
+  if (shipEl) shipEl.style.display = isDemoTheme() ? '' : 'none';
+  if (mascotEl) {
+    if (isDemoTheme() || !cfg.character) {
+      mascotEl.style.display = 'none';
+      if (mascotBubbleEl) mascotBubbleEl.classList.remove('show');
+    } else {
+      mascotEl.querySelector('img').src = cfg.character;
+      mascotEl.style.display = '';
+    }
+  }
+}
+
+// Rebuild the scoring legend for the current theme:
+//  DEMO  → all 3 bonus webps; A/B/C → only that theme's own character
+function renderLegend() {
+  const bodyEl = document.getElementById('legend-body');
+  const titleEl = document.getElementById('legend-title');
+  if (!bodyEl) return;
+
+  const cfg = THEME_CONFIG[activeTheme] || THEME_CONFIG.animated_svg;
+  const bonusSrcs = isDemoTheme() ? BonusWebpList : [cfg.character];
+
+  const starSvg = `<svg viewBox="0 0 24 24" style="width:100%;height:100%;"><polygon points="12,2 15,9 22,9 17,14 19,21 12,17 5,21 7,14 2,9 9,9" fill="var(--blue)"/><circle cx="12" cy="12" r="2" fill="#fff"/></svg>`;
+  const bombSvg = `<svg viewBox="0 0 24 24" style="width:100%;height:100%;"><circle cx="11" cy="14" r="8.5" fill="#1A1512" stroke="#D63030" stroke-width="1.5"/><rect x="9.8" y="4.2" width="2.6" height="3.2" rx="0.6" fill="#6B6560"/><circle cx="18" cy="1.9" r="1.4" fill="#FFB020"/></svg>`;
+
+  const bonusRows = bonusSrcs.map(src => `
+    <div class="legend-row plus">
+      <div class="legend-icon"><img src="${src}" alt=""></div>
+      <div class="legend-text"><span class="legend-name">加分寶物</span><span class="legend-val plus">+30</span></div>
+    </div>`).join('');
+
+  bodyEl.innerHTML = `
+    ${bonusRows}
+    <div class="legend-row">
+      <div class="legend-icon">${starSvg}</div>
+      <div class="legend-text"><span class="legend-name">一般寶物</span><span class="legend-val plus">+10~25</span></div>
+    </div>
+    <div class="legend-row minus">
+      <div class="legend-icon">${bombSvg}</div>
+      <div class="legend-text"><span class="legend-name">炸藥</span><span class="legend-val minus">−30</span></div>
+    </div>
+    <p class="legend-tip">✊ 握拳碰到才算抓取<br>🖐️ 張開手掌召喚落物</p>`;
+
+  if (titleEl) titleEl.textContent = `圖鑑 · ${themeName(activeTheme)}`;
+}
+
+// Mascot reacts when it "throws out" a treasure (open-hand summon)
+function mascotThrow() {
+  if (!mascotEl || isDemoTheme()) return;
+  mascotEl.classList.remove('throw');
+  void mascotEl.offsetWidth;
+  mascotEl.classList.add('throw');
+  if (Math.random() < 0.35) showMascotBubble();
+}
+
 // Penalty bomb (appears in every theme, ratio 4 normal : 1 bomb)
 const BOMB_PENALTY = -30;
 const BombSVG = `<svg viewBox="0 0 24 24" style="width:100%;height:100%;">
@@ -402,8 +531,8 @@ document.addEventListener('DOMContentLoaded', () => {
   canvasElement = document.getElementById('game-canvas');
   canvasCtx = canvasElement.getContext('2d');
 
-  // Load high scores
-  document.getElementById('high-score').textContent = formatScore(highScore);
+  // Load high score for the current (default) theme
+  updateHighScoreDisplay();
 
   // Setup Event Listeners
   setupEventListeners();
@@ -425,8 +554,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize MediaPipe Hands
   initMediaPipe();
 
-  // Item-dropping ship at the top of the screen
+  // Item-dropping ship (DEMO) + corner mascot (A/B/C themes)
   createShip();
+  createMascot();
+  applyThemeVisuals();
+  renderLegend();
 });
 
 // Setup DOM Event Listeners
@@ -447,6 +579,9 @@ function setupEventListeners() {
   const themeSelect = document.getElementById('theme-select');
   themeSelect.addEventListener('change', (e) => {
     activeTheme = e.target.value;
+    applyThemeVisuals();
+    renderLegend();           // each theme shows its own scoring legend
+    updateHighScoreDisplay(); // each theme has its own high score
     updateSystemConsole(`主題切換為：${themeSelect.options[themeSelect.selectedIndex].text}`);
   });
 
@@ -511,10 +646,10 @@ function setupEventListeners() {
   document.getElementById('btn-game-over-leaderboard').addEventListener('click', openLeaderboard);
   document.getElementById('btn-lb-close').addEventListener('click', closeLeaderboard);
   document.getElementById('btn-lb-clear').addEventListener('click', () => {
-    if (confirm('確定要清除所有排行榜記錄嗎？')) {
-      localStorage.removeItem(LEADERBOARD_KEY);
+    if (confirm(`確定要清除「${themeName(activeTheme)}」的排行榜記錄嗎？`)) {
+      localStorage.removeItem(lbKey(activeTheme));
       renderLeaderboard();
-      updateSystemConsole('排行榜記錄已清除。');
+      updateSystemConsole(`${themeName(activeTheme)} 排行榜記錄已清除。`);
     }
   });
 
@@ -523,6 +658,23 @@ function setupEventListeners() {
     if (e.target === document.getElementById('leaderboard-modal')) {
       closeLeaderboard();
     }
+  });
+
+  // Fullscreen toggle — whole page (UI included); Esc exits (browser default)
+  const fsBtn = document.getElementById('btn-fullscreen');
+  fsBtn.addEventListener('click', () => {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      document.documentElement.requestFullscreen().catch(err => {
+        updateSystemConsole(`全螢幕無法啟動：${err.message}`);
+      });
+    }
+  });
+  document.addEventListener('fullscreenchange', () => {
+    const on = !!document.fullscreenElement;
+    fsBtn.querySelector('.icon-enter-fs').style.display = on ? 'none' : '';
+    fsBtn.querySelector('.icon-exit-fs').style.display = on ? '' : 'none';
   });
 
   // Settings modal (gear icon top-right)
@@ -1030,12 +1182,11 @@ function endGame() {
   // Show score
   document.getElementById('final-score-value').textContent = score;
   
-  // Check High Score
+  // Check High Score (per current theme)
   const recordTag = document.getElementById('new-high-score-msg');
-  if (score > highScore) {
-    highScore = score;
-    localStorage.setItem('cybergrab_high_score', highScore);
-    document.getElementById('high-score').textContent = formatScore(highScore);
+  if (score > getHighScore(activeTheme)) {
+    localStorage.setItem(highKey(activeTheme), score);
+    updateHighScoreDisplay();
     recordTag.classList.remove('hidden');
   } else {
     recordTag.classList.add('hidden');
@@ -1076,9 +1227,19 @@ function spawnFallingItem() {
   itemEl.style.width = `${size}px`;
   itemEl.style.height = `${size}px`;
   
-  // Position: drop from the ship's belly line, at its current x
-  const x = shipEl ? (shipX * viewportWidth) : (0.1 + Math.random() * 0.8) * viewportWidth;
-  const y = (shipEl ? shipBottomPx : 0) + size / 2;
+  // Position:
+  //  DEMO  → drop from the ship's belly line, at the ship's current x
+  //  A/B/C → the mascot "throws" from the corner, but loot still rains from
+  //          the top at a random x (easier to catch)
+  let x, y;
+  if (isDemoTheme() && shipEl) {
+    x = shipX * viewportWidth;
+    y = shipBottomPx + size / 2;
+  } else {
+    x = (0.1 + Math.random() * 0.8) * viewportWidth;
+    y = -size / 2;
+    mascotThrow();
+  }
 
   itemEl.style.left = `${x}px`;
   itemEl.style.top = `${y}px`;
@@ -1088,7 +1249,7 @@ function spawnFallingItem() {
   let elementContent = "";
   let isBonus = false;
 
-  // Spawn roll — bomb 20%, bonus (2/3/4.webp) 10%, otherwise theme item
+  // Spawn roll — bomb 20%, bonus 10%, otherwise a normal treasure
   const roll = Math.random();
   const isBomb = roll < 0.2;
   isBonus = !isBomb && roll < 0.3;
@@ -1097,30 +1258,19 @@ function spawnFallingItem() {
     value = BOMB_PENALTY;
     itemEl.classList.add('bomb');
   } else if (isBonus) {
-    const bonusSrc = BonusWebpList[Math.floor(Math.random() * BonusWebpList.length)];
+    // DEMO: any of the 3 webps; a theme: only that theme's own character
+    const cfg = THEME_CONFIG[activeTheme] || THEME_CONFIG.animated_svg;
+    const bonusSrc = cfg.character || BonusWebpList[Math.floor(Math.random() * BonusWebpList.length)];
     elementContent = `<img src="${bonusSrc}" alt="">`;
     value = BONUS_VALUE;
     itemEl.classList.add('bonus');
-  } else
-  // Dynamic Theme content injection
-  if (activeTheme === 'animated_svg') {
+  } else {
+    // Normal treasure — neon SVG set (shared across all themes)
     const keys = Object.keys(SVGTemplates);
     const randomKey = keys[Math.floor(Math.random() * keys.length)];
     elementContent = SVGTemplates[randomKey];
-    // Give different SVGs different values
     if (randomKey === 'star') value = 15;
     if (randomKey === 'ghost') value = 25;
-  } else if (activeTheme === 'cute_emoji') {
-    const randomEmoji = EmojiThemeList[Math.floor(Math.random() * EmojiThemeList.length)];
-    // Style as colored emoji text
-    elementContent = `<span style="font-size: ${size * 0.75}px; user-select: none;">${randomEmoji}</span>`;
-  } else if (activeTheme === 'pixel_art') {
-    const randomPixel = PixelThemeList[Math.floor(Math.random() * PixelThemeList.length)];
-    elementContent = randomPixel;
-    value = 20;
-  } else if (activeTheme === 'custom') {
-    elementContent = `<img src="${customGifUrl}" alt="falling item" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22><text y=%2220%22 font-size=%2220%22>🌐</text></svg>';">`;
-    value = 10;
   }
 
   itemEl.innerHTML = elementContent;
