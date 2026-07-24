@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>控制台 // OPERATOR — CYBER GRAB</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎛️</text></svg>">
+  <style>
+    :root {
+      --bg: #EAE6DF; --ink: #1A1512; --white: #FAFAF8;
+      --pink: #E84FA0; --pink-dark: #C0307A;
+      --blue: #2E4FD8; --blue-dark: #1A32A8;
+      --green: #1DA462; --danger: #D63030;
+      --border: 3px solid var(--ink);
+      --shadow: 4px 4px 0 var(--ink);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Space Grotesk', system-ui, sans-serif;
+      background: var(--bg); color: var(--ink);
+      min-height: 100vh; padding: 22px;
+      display: flex; flex-direction: column; gap: 18px;
+      max-width: 560px; margin: 0 auto;
+    }
+    header { border-bottom: var(--border); padding-bottom: 12px; }
+    h1 { font-size: 1.5rem; letter-spacing: 2px; text-transform: uppercase; }
+    .sub { font-size: 0.72rem; font-weight: 700; letter-spacing: 1px; color: rgba(26,21,18,0.5); margin-top: 4px; }
+
+    .status {
+      background: var(--ink); color: var(--white);
+      border: var(--border); box-shadow: var(--shadow);
+      padding: 14px 16px; display: grid;
+      grid-template-columns: 1fr 1fr; gap: 10px 16px;
+    }
+    .status .cell { display: flex; flex-direction: column; gap: 2px; }
+    .status .k { font-size: 0.62rem; letter-spacing: 1px; text-transform: uppercase; color: rgba(255,255,255,0.5); }
+    .status .v { font-size: 1.3rem; font-weight: 700; }
+    #st-theme { color: var(--pink); }
+    #st-playing.live { color: var(--green); }
+
+    .group { display: flex; flex-direction: column; gap: 8px; }
+    .group > .label { font-size: 0.7rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: rgba(26,21,18,0.55); }
+    .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    button {
+      font-family: inherit; font-weight: 700; font-size: 0.9rem;
+      background: var(--white); color: var(--ink);
+      border: var(--border); box-shadow: var(--shadow);
+      padding: 12px 16px; cursor: pointer; flex: 1; min-width: 84px;
+      transition: transform 0.1s, box-shadow 0.1s, background 0.1s;
+    }
+    button:hover { transform: translate(-1px,-1px); box-shadow: 5px 5px 0 var(--ink); }
+    button:active { transform: translate(3px,3px); box-shadow: 0 0 0 var(--ink); }
+    button.active { background: var(--pink); color: var(--white); border-color: var(--pink-dark); }
+    button.big { background: var(--blue); color: var(--white); border-color: var(--blue-dark); font-size: 1.05rem; padding: 15px; }
+
+    .note {
+      font-size: 0.72rem; font-weight: 600; line-height: 1.6;
+      color: rgba(26,21,18,0.55); border-top: 2px solid var(--ink); padding-top: 12px;
+    }
+    .offline { color: var(--danger); font-weight: 700; }
+
+    .log-list {
+      border: 2px solid var(--ink); background: var(--white);
+      max-height: 190px; overflow-y: auto;
+    }
+    .log-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 8px 12px; border-bottom: 1px solid rgba(26,21,18,0.12);
+      font-size: 0.82rem; font-weight: 600;
+    }
+    .log-row:last-child { border-bottom: none; }
+    .log-time { color: rgba(26,21,18,0.45); flex-shrink: 0; }
+    .log-round { flex-grow: 1; }
+    .log-score { font-weight: 700; color: var(--blue); flex-shrink: 0; }
+    .log-empty { padding: 14px; text-align: center; font-size: 0.78rem; color: rgba(26,21,18,0.4); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>控制台 // OPERATOR</h1>
+    <p class="sub">此頁放在筆電螢幕 — 玩家的外接螢幕看不到</p>
+  </header>
+
+  <div class="status">
+    <div class="cell"><span class="k">目前主題 Theme</span><span class="v" id="st-theme">—</span></div>
+    <div class="cell"><span class="k">狀態 State</span><span class="v" id="st-playing">待機</span></div>
+    <div class="cell"><span class="k">分數 Score</span><span class="v" id="st-score">0</span></div>
+    <div class="cell"><span class="k">剩餘時間 Time</span><span class="v" id="st-timer">—</span></div>
+  </div>
+
+  <div class="group">
+    <span class="label">切換主題 Theme</span>
+    <div class="btn-row" id="theme-row">
+      <button data-theme="animated_svg">DEMO</button>
+      <button data-theme="themeA">主題 A</button>
+      <button data-theme="themeB">主題 B</button>
+      <button data-theme="themeC">主題 C</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <span class="label">難度 Difficulty</span>
+    <div class="btn-row" id="diff-row">
+      <button data-diff="easy">簡單</button>
+      <button data-diff="medium">普通</button>
+      <button data-diff="hard">困難</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <span class="label">遊戲時間 Duration</span>
+    <div class="btn-row" id="dur-row">
+      <button data-dur="30">30 秒</button>
+      <button data-dur="60">60 秒</button>
+      <button data-dur="90">90 秒</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <span class="label">遊戲 Game</span>
+    <div class="btn-row">
+      <button class="big" id="btn-start">開始 / 重開這局</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <span class="label">遊戲紀錄 LOG（幾點幾分・第幾回・幾分）</span>
+    <div class="log-list" id="log-list"><div class="log-empty">尚無紀錄</div></div>
+  </div>
+
+  <p class="note" id="note">
+    連線中… 若一直顯示未連線，請確認遊戲畫面（index.html）已在同一個瀏覽器開啟。<br>
+    提示：遊戲第一次要在遊戲視窗按一次「啟動系統」以解鎖音效，之後就能用這裡遙控。
+  </p>
+
+  <script>
+    const channel = ('BroadcastChannel' in window) ? new BroadcastChannel('cybergrab') : null;
+    const noteEl = document.getElementById('note');
+
+    function send(cmd, value) {
+      if (!channel) return;
+      channel.postMessage({ kind: 'cmd', cmd, value });
+    }
+
+    // Wire buttons
+    document.getElementById('theme-row').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      send('setTheme', b.dataset.theme);
+    });
+    document.getElementById('diff-row').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      send('setDifficulty', b.dataset.diff);
+    });
+    document.getElementById('dur-row').addEventListener('click', (e) => {
+      const b = e.target.closest('button'); if (!b) return;
+      send('setDuration', b.dataset.dur);
+    });
+    document.getElementById('btn-start').addEventListener('click', () => send('restart'));
+
+    // Reflect live status from the game window
+    let lastSeen = 0;
+    function markActive(rowId, attr, val) {
+      document.querySelectorAll(`#${rowId} button`).forEach(b => {
+        b.classList.toggle('active', b.dataset[attr] === String(val));
+      });
+    }
+    if (channel) {
+      channel.onmessage = (ev) => {
+        const m = ev.data || {};
+        if (m.kind !== 'status') return;
+        lastSeen = Date.now();
+        document.getElementById('st-theme').textContent = m.themeLabel || '—';
+        document.getElementById('st-score').textContent = m.score;
+        document.getElementById('st-timer').textContent = m.playing ? `${m.timer}s` : `${m.duration}s`;
+        const pe = document.getElementById('st-playing');
+        pe.textContent = m.playing ? '進行中' : '待機';
+        pe.classList.toggle('live', !!m.playing);
+        markActive('theme-row', 'theme', m.theme);
+        markActive('diff-row', 'diff', m.difficulty);
+        markActive('dur-row', 'dur', m.duration);
+      };
+      send('requestStatus'); // ask the game window for its current state on load
+    } else {
+      noteEl.innerHTML = '<span class="offline">此瀏覽器不支援 BroadcastChannel，請改用 Chrome / Safari 最新版。</span>';
+    }
+
+    // Game log — shares localStorage with the game (same origin), so read it directly
+    function renderLog() {
+      let log = [];
+      try { log = JSON.parse(localStorage.getItem('cybergrab_game_log') || '[]'); } catch {}
+      const el = document.getElementById('log-list');
+      if (!log.length) { el.innerHTML = '<div class="log-empty">尚無紀錄</div>'; return; }
+      el.innerHTML = log.map(e => `
+        <div class="log-row">
+          <span class="log-time">${e.time}</span>
+          <span class="log-round">第 ${e.round} 回</span>
+          <span class="log-score">${e.score} 分</span>
+        </div>`).join('');
+    }
+    renderLog();
+    // Refresh when the game window writes a new round
+    window.addEventListener('storage', (e) => { if (e.key === 'cybergrab_game_log') renderLog(); });
+
+    // Connection watchdog
+    setInterval(() => {
+      renderLog();
+      if (!channel) return;
+      const online = Date.now() - lastSeen < 1500;
+      if (!online && lastSeen === 0) {
+        noteEl.innerHTML = '<span class="offline">尚未連上遊戲畫面。</span> 請在同一個瀏覽器另開 index.html（遊戲畫面）。';
+      } else if (!online) {
+        noteEl.innerHTML = '<span class="offline">與遊戲畫面斷線。</span> 請確認遊戲視窗還開著。';
+      } else {
+        noteEl.textContent = '已連線 — 這裡按什麼，外接螢幕的遊戲就跟著變。';
+      }
+    }, 1000);
+  </script>
+</body>
+</html>

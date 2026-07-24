@@ -187,10 +187,14 @@ body::before {
    ============================================================ */
 .game-grid {
   display: grid;
-  grid-template-columns: 290px 1fr 210px;
+  /* Center column is FIXED at 900px (shrinks only on small screens).
+     The whole trio centers; fullscreen just adds empty space around it. */
+  grid-template-columns: 290px minmax(0, 900px) 210px;
   gap: 16px;
   flex-grow: 1;
-  align-items: stretch;
+  align-items: stretch;   /* panels match the fixed game height */
+  align-content: center;  /* center the row vertically, don't stretch it */
+  justify-content: center;/* center the trio horizontally */
   /* Allow the grid to shrink inside the fixed-height container */
   min-height: 0;
 }
@@ -396,8 +400,12 @@ body::before {
   position: relative;
   border: var(--border);
   box-shadow: var(--shadow-lg);
-  /* Height follows the browser window (grid stretch); no fixed ratio on desktop */
-  min-height: 0;
+  /* Fixed play area: up to 900px wide, locked to 4:3 (→ 900×675).
+     Does not grow with the window; the layout centers instead. */
+  width: 100%;
+  max-width: 900px;
+  aspect-ratio: 4 / 3;
+  align-self: center;
   background-color: var(--ink);
   display: flex;
   overflow: hidden;
@@ -423,19 +431,10 @@ body::before {
   box-shadow: inset 0 0 30px rgba(232,79,160,0.15), 0 0 25px rgba(232,79,160,0.4);
 }
 
-/* Subtle scanlines — softer than before */
+/* CRT scanline "horizontal bars" overlay — removed (was a full-screen layer
+   composited over the play area). Element kept in HTML but not rendered. */
 .scanline-overlay {
-  position: absolute;
-  inset: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 3px,
-    rgba(0,0,0,0.04) 3px,
-    rgba(0,0,0,0.04) 4px
-  );
-  pointer-events: none;
-  z-index: 8;
+  display: none;
 }
 
 #screen-flash {
@@ -1049,9 +1048,8 @@ input:checked + .slider:before {
   object-fit: contain;
 }
 
-.falling-item svg {
-  filter: drop-shadow(0 0 6px currentColor);
-}
+/* (removed) per-item blurred glow on SVGs — blur filters re-render every frame
+   as items fall, which was the main falling-item performance cost. */
 
 /* SVG theme colors */
 .neon-svg-cyan   { color: var(--blue); }
@@ -1059,14 +1057,12 @@ input:checked + .slider:before {
 .neon-svg-green  { color: #1DA462; }
 .neon-svg-yellow { color: #E07020; }
 
-/* Penalty bomb: red warning glow */
-.falling-item.bomb {
-  filter: drop-shadow(0 0 8px rgba(214,48,48,0.85)) drop-shadow(2px 2px 0 rgba(0,0,0,0.6));
-}
-
-/* Bonus item (2/3/4.webp): golden glow */
+/* Penalty bomb & bonus items: blurred glow removed for performance.
+   They keep the base hard shadow; the bomb's red shape and the bonus
+   character image are distinct enough without a glow. */
+.falling-item.bomb,
 .falling-item.bonus {
-  filter: drop-shadow(0 0 8px rgba(255,176,32,0.9)) drop-shadow(2px 2px 0 rgba(0,0,0,0.6));
+  filter: drop-shadow(2px 2px 0 rgba(0,0,0,0.6));
 }
 
 .falling-item.bonus img {

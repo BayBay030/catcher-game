@@ -525,6 +525,70 @@ function updateSystemConsole(message) {
   }
 }
 
+// ---- Shared setters (used by the in-game settings AND the operator console) ----
+function setActiveTheme(theme) {
+  activeTheme = theme;
+  const sel = document.getElementById('theme-select');
+  if (sel) sel.value = theme;
+  applyThemeVisuals();
+  renderLegend();
+  updateHighScoreDisplay();
+}
+
+function setDifficulty(value) {
+  difficulty = value;
+  const sel = document.getElementById('difficulty-select');
+  if (sel) sel.value = value;
+  adjustDifficultySettings();
+}
+
+function setDuration(value) {
+  gameDuration = parseInt(value, 10);
+  const sel = document.getElementById('duration-select');
+  if (sel) sel.value = String(gameDuration);
+  if (!isPlaying) {
+    document.getElementById('game-timer').textContent = `${gameDuration}s`;
+  }
+}
+
+// ---- Operator console link (separate window on the laptop, hidden from players) ----
+// Same-origin BroadcastChannel — both windows must be the same site in the same browser.
+let opChannel = null;
+
+function initOperatorChannel() {
+  if (typeof BroadcastChannel === 'undefined') return;
+  opChannel = new BroadcastChannel('cybergrab');
+  opChannel.onmessage = (ev) => {
+    const m = ev.data || {};
+    if (m.kind !== 'cmd') return;
+    switch (m.cmd) {
+      case 'setTheme':      setActiveTheme(m.value); updateSystemConsole(`（遙控）主題：${themeName(m.value)}`); break;
+      case 'setDifficulty': setDifficulty(m.value);  updateSystemConsole(`（遙控）難度已切換`); break;
+      case 'setDuration':   setDuration(m.value);    updateSystemConsole(`（遙控）遊戲時間 ${gameDuration}s`); break;
+      case 'start':         if (!isPlaying) startGame(); break;
+      case 'restart':       startGame(); break;
+      case 'requestStatus': broadcastStatus(); break;
+    }
+    broadcastStatus();
+  };
+  setInterval(broadcastStatus, 500);
+}
+
+function broadcastStatus() {
+  if (!opChannel) return;
+  opChannel.postMessage({
+    kind: 'status',
+    theme: activeTheme,
+    themeLabel: themeName(activeTheme),
+    score: score,
+    timer: timer,
+    playing: isPlaying,
+    duration: gameDuration,
+    difficulty: difficulty,
+    high: getHighScore(activeTheme)
+  });
+}
+
 // Initialize Application Elements
 document.addEventListener('DOMContentLoaded', () => {
   videoElement = document.getElementById('webcam');
@@ -559,6 +623,9 @@ document.addEventListener('DOMContentLoaded', () => {
   createMascot();
   applyThemeVisuals();
   renderLegend();
+
+  // Link to the operator console (hidden control window on the laptop)
+  initOperatorChannel();
 });
 
 // Setup DOM Event Listeners
@@ -578,28 +645,21 @@ function setupEventListeners() {
   // Theme change
   const themeSelect = document.getElementById('theme-select');
   themeSelect.addEventListener('change', (e) => {
-    activeTheme = e.target.value;
-    applyThemeVisuals();
-    renderLegend();           // each theme shows its own scoring legend
-    updateHighScoreDisplay(); // each theme has its own high score
+    setActiveTheme(e.target.value);
     updateSystemConsole(`主題切換為：${themeSelect.options[themeSelect.selectedIndex].text}`);
   });
 
   // Game duration change (30 / 60 / 90 seconds)
   const durationSelect = document.getElementById('duration-select');
   durationSelect.addEventListener('change', (e) => {
-    gameDuration = parseInt(e.target.value, 10);
-    if (!isPlaying) {
-      document.getElementById('game-timer').textContent = `${gameDuration}s`;
-    }
+    setDuration(e.target.value);
     updateSystemConsole(`遊戲時間已設為 ${gameDuration} 秒`);
   });
 
   // Difficulty change
   const diffSelect = document.getElementById('difficulty-select');
   diffSelect.addEventListener('change', (e) => {
-    difficulty = e.target.value;
-    adjustDifficultySettings();
+    setDifficulty(e.target.value);
     updateSystemConsole(`難度已調整為：${diffSelect.options[diffSelect.selectedIndex].text}`);
   });
 
@@ -693,14 +753,22 @@ function setupEventListeners() {
   });
 }
 
+// Cap the canvas backing resolution so drawing cost stays flat no matter how
+// big the display / fullscreen is. CSS still stretches it to fill the screen
+// (same aspect ratio → no crop), so fullscreen just scales one small render up.
+const CANVAS_MAX_WIDTH = 900; // "best size" internal render width
+
 // Adjust Canvas Resolution based on viewport sizes
 function adjustCanvasSize() {
   const viewport = document.getElementById('game-viewport');
+  // Game-logic coordinate space stays in on-screen (display) pixels
   viewportWidth = viewport.clientWidth;
   viewportHeight = viewport.clientHeight;
-  
-  canvasElement.width = viewportWidth;
-  canvasElement.height = viewportHeight;
+
+  // Backing buffer is capped and keeps the display's aspect ratio
+  const scale = Math.min(1, CANVAS_MAX_WIDTH / Math.max(1, viewportWidth));
+  canvasElement.width = Math.round(viewportWidth * scale);
+  canvasElement.height = Math.round(viewportHeight * scale);
 }
 
 // Change gravity and spawn configs based on difficulty
@@ -1043,42 +1111,44 @@ function drawCyberSkeleton(landmarks) {
   canvasCtx.shadowBlur = 12;
   canvasCtx.strokeStyle = strokeStyle;
 
-  // Draw bone lines
-  connections.forEach(([i1, i2]) => {
-    const pt1 = landmarks[i1];
-    const pt2 = landmarks[i2];
-    
-    // Map non-mirrored landmarks to canvas mirrored coords
-    const x1 = (1 - pt1.x) * canvasElement.width;
-    const y1 = pt1.y * canvasElement.height;
-    const x2 = (1 - pt2.x) * canvasElement.width;
-    const y2 = pt2.y * canvasElement.height;
-    
-    canvasCtx.beginPath();
-    canvasCtx.moveTo(x1, y1);
-    canvasCtx.lineTo(x2, y2);
-    canvasCtx.stroke();
-  });
+  const cw = canvasElement.width;
+  const ch = canvasElement.height;
+  const px = (i) => (1 - landmarks[i].x) * cw; // mirrored X
+  const py = (i) => landmarks[i].y * ch;
 
-  // Draw node points
+  // Draw ALL bone lines in a single path → shadowBlur runs once, not 23×
+  canvasCtx.beginPath();
+  connections.forEach(([i1, i2]) => {
+    canvasCtx.moveTo(px(i1), py(i1));
+    canvasCtx.lineTo(px(i2), py(i2));
+  });
+  canvasCtx.stroke();
+
+  // Node points — batch by colour so shadowBlur runs twice, not 21×
   canvasCtx.shadowBlur = 8;
+  const tips = [4, 8, 12, 16, 20];
+
+  // White knuckle nodes (single fill)
+  canvasCtx.fillStyle = '#ffffff';
+  canvasCtx.beginPath();
   for (let i = 0; i < landmarks.length; i++) {
-    const pt = landmarks[i];
-    const x = (1 - pt.x) * canvasElement.width;
-    const y = pt.y * canvasElement.height;
-    
-    canvasCtx.beginPath();
+    if (tips.includes(i)) continue;
+    const x = px(i), y = py(i);
+    canvasCtx.moveTo(x + 5, y);
     canvasCtx.arc(x, y, 5, 0, 2 * Math.PI);
-    
-    // Color tips uniquely
-    if ([4, 8, 12, 16, 20].includes(i)) {
-      canvasCtx.fillStyle = '#fffb00'; // yellow tips
-      canvasCtx.shadowColor = 'rgba(255, 251, 0, 0.8)';
-    } else {
-      canvasCtx.fillStyle = '#ffffff';
-    }
-    canvasCtx.fill();
   }
+  canvasCtx.fill();
+
+  // Yellow finger tips (single fill)
+  canvasCtx.fillStyle = '#fffb00';
+  canvasCtx.shadowColor = 'rgba(255, 251, 0, 0.8)';
+  canvasCtx.beginPath();
+  for (const i of tips) {
+    const x = px(i), y = py(i);
+    canvasCtx.moveTo(x + 5, y);
+    canvasCtx.arc(x, y, 5, 0, 2 * Math.PI);
+  }
+  canvasCtx.fill();
 
   canvasCtx.restore();
 }
