@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>控制台 // OPERATOR — CYBER GRAB</title>
+  <title>控制台 // OPERATOR — Aerocatch</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎛️</text></svg>">
   <style>
     :root {
@@ -35,7 +35,6 @@
     .status .cell { display: flex; flex-direction: column; gap: 2px; }
     .status .k { font-size: 0.62rem; letter-spacing: 1px; text-transform: uppercase; color: rgba(255,255,255,0.5); }
     .status .v { font-size: 1.3rem; font-weight: 700; }
-    #st-theme { color: var(--pink); }
     #st-playing.live { color: var(--green); }
 
     .group { display: flex; flex-direction: column; gap: 8px; }
@@ -83,20 +82,12 @@
   </header>
 
   <div class="status">
-    <div class="cell"><span class="k">目前主題 Theme</span><span class="v" id="st-theme">—</span></div>
     <div class="cell"><span class="k">狀態 State</span><span class="v" id="st-playing">待機</span></div>
     <div class="cell"><span class="k">分數 Score</span><span class="v" id="st-score">0</span></div>
     <div class="cell"><span class="k">剩餘時間 Time</span><span class="v" id="st-timer">—</span></div>
   </div>
 
   <div class="group">
-    <span class="label">切換主題 Theme</span>
-    <div class="btn-row" id="theme-row">
-      <button data-theme="animated_svg">DEMO</button>
-      <button data-theme="themeA">主題 A</button>
-      <button data-theme="themeB">主題 B</button>
-      <button data-theme="themeC">主題 C</button>
-    </div>
   </div>
 
   <div class="group">
@@ -144,10 +135,6 @@
     }
 
     // Wire buttons
-    document.getElementById('theme-row').addEventListener('click', (e) => {
-      const b = e.target.closest('button'); if (!b) return;
-      send('setTheme', b.dataset.theme);
-    });
     document.getElementById('diff-row').addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b) return;
       send('setDifficulty', b.dataset.diff);
@@ -170,13 +157,11 @@
         const m = ev.data || {};
         if (m.kind !== 'status') return;
         lastSeen = Date.now();
-        document.getElementById('st-theme').textContent = m.themeLabel || '—';
         document.getElementById('st-score').textContent = m.score;
         document.getElementById('st-timer').textContent = m.playing ? `${m.timer}s` : `${m.duration}s`;
         const pe = document.getElementById('st-playing');
         pe.textContent = m.playing ? '進行中' : '待機';
         pe.classList.toggle('live', !!m.playing);
-        markActive('theme-row', 'theme', m.theme);
         markActive('diff-row', 'diff', m.difficulty);
         markActive('dur-row', 'dur', m.duration);
       };

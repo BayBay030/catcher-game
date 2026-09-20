@@ -2,7 +2,13 @@
 .DS_Store
 
 # 原始美術檔不上公開 repo（遊戲只需要 public/images/ 的 webp）
+# repo 會被公開服務，所以來源檔留在本機就好
 public/原始圖檔/
-public/圖層*.png
 public/works.csv
 public/works.json
+
+# 來源 PNG / 設計稿 / PSD（遊戲執行時完全用不到）
+public/images/*.png
+public/images/要用的/
+*.psd
+整體.jpg

@@ -1,5 +1,5 @@
 /**
- * CyberGrab - Interactive Gesture Catching Game
+ * Aerocatch 飛船秘寶 - Interactive Gesture Catching Game
  * Core Application Logic
  */
 
@@ -162,53 +162,94 @@ let gameDuration = 60; // seconds per round: 30 / 60 / 90 (set in settings)
 let timerInterval = null;
 
 // Human-readable theme names (used in leaderboard headings & console)
-const THEME_NAMES = {
-  animated_svg: 'DEMO',
-  themeA: '主題 A',
-  themeB: '主題 B',
-  themeC: '主題 C'
-};
-function themeName(theme) { return THEME_NAMES[theme || activeTheme] || 'DEMO'; }
+/* ============================================================
+   Record store
+   ------------------------------------------------------------
+   Every finished round goes into one log. The leaderboard and the
+   per-theme high score are DERIVED from that log rather than stored
+   separately, so deleting a row in the admin panel actually removes
+   it everywhere instead of leaving a ghost in the HUD.
+   ============================================================ */
+const GAME_LOG_KEY = 'cybergrab_game_log';
+const ROUND_COUNT_KEY = 'cybergrab_round_count';
+const LOG_LIMIT = 500;   // an event day can run a few hundred rounds
 
-// Per-theme high score
-function highKey(theme) { return `cybergrab_high_${theme || activeTheme}`; }
-function getHighScore(theme) { return parseInt(localStorage.getItem(highKey(theme)) || '0', 10); }
+const DIFFICULTY_NAMES = { easy: '簡單', medium: '普通', hard: '困難' };
+
+function getGameLog() {
+  let raw;
+  try { raw = JSON.parse(localStorage.getItem(GAME_LOG_KEY) || '[]'); }
+  catch { return []; }
+  if (!Array.isArray(raw)) return [];
+  // Rounds logged before the admin panel existed carry no id, date or theme.
+  // Normalise them on read so they can still be listed and deleted.
+  return raw.map((e, i) => ({
+    id: e.id || `legacy-${i}-${e.round || 0}-${e.score || 0}`,
+    round: e.round || 0,
+    ymd: e.ymd || '',
+    time: e.time || '',
+    score: Number(e.score) || 0,
+    difficulty: e.difficulty || 'medium'
+  }));
+}
+
+function writeGameLog(log) {
+  localStorage.setItem(GAME_LOG_KEY, JSON.stringify(log.slice(0, LOG_LIMIT)));
+}
+
+function saveGameLog(finalScore) {
+  const round = parseInt(localStorage.getItem(ROUND_COUNT_KEY) || '0', 10) + 1;
+  localStorage.setItem(ROUND_COUNT_KEY, round);
+  const now = new Date();
+  const p = n => String(n).padStart(2, '0');
+  const log = getGameLog();
+  log.unshift({
+    id: `${now.getTime()}-${round}`,
+    round,
+    ymd: `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`,
+    time: `${p(now.getHours())}:${p(now.getMinutes())}`,
+    score: finalScore,
+    difficulty
+  });
+  writeGameLog(log);
+}
+
+function deleteLogEntry(id) { writeGameLog(getGameLog().filter(e => e.id !== id)); }
+function deleteLogDay(ymd)  { writeGameLog(getGameLog().filter(e => (e.ymd || '') !== ymd)); }
+
+function clearAllRecords() {
+  localStorage.removeItem(GAME_LOG_KEY);
+  localStorage.removeItem(ROUND_COUNT_KEY);
+  // the pre-derivation stores would otherwise keep haunting the HUD
+  Object.keys(localStorage)
+    .filter(k => k.startsWith('cybergrab_high_') || k.startsWith('cybergrab_leaderboard_'))
+    .forEach(k => localStorage.removeItem(k));
+}
+
+// ---- derived views -------------------------------------------------
+function getHighScore() {
+  return getGameLog().reduce((max, e) => (e.score > max ? e.score : max), 0);
+}
+
 function updateHighScoreDisplay() {
   document.getElementById('high-score').textContent = formatScore(getHighScore());
 }
 
-// Per-theme leaderboard (Top 5 each, stored in localStorage)
-function lbKey(theme) { return `cybergrab_leaderboard_${theme || activeTheme}`; }
-
-function getLeaderboard(theme) {
-  try {
-    return JSON.parse(localStorage.getItem(lbKey(theme)) || '[]');
-  } catch {
-    return [];
-  }
-}
-
-function saveToLeaderboard(finalScore) {
-  const board = getLeaderboard(activeTheme);
-  const entry = {
-    score: finalScore,
-    date: new Date().toLocaleDateString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-  };
-  board.push(entry);
-  board.sort((a, b) => b.score - a.score);
-  const top5 = board.slice(0, 5);
-  localStorage.setItem(lbKey(activeTheme), JSON.stringify(top5));
-  return top5;
+function getLeaderboard() {
+  return getGameLog()
+    .filter(e => e.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5)
+    .map(e => ({ score: e.score, date: e.ymd ? `${e.ymd.slice(5)} ${e.time}` : (e.time || '—') }));
 }
 
 function renderLeaderboard() {
-  const board = getLeaderboard(activeTheme);
+  const board = getLeaderboard();
   const listEl = document.getElementById('leaderboard-list');
   const rankEmojis = ['🥇', '🥈', '🥉', '4', '5'];
 
-  // Show which theme's ranking this is
   const subtitleEl = document.querySelector('.leaderboard-subtitle');
-  if (subtitleEl) subtitleEl.textContent = `${themeName(activeTheme)} // TOP 5 RECORDS`;
+  if (subtitleEl) subtitleEl.textContent = 'HALL OF FAME // TOP 5 RECORDS';
 
   if (board.length === 0) {
     listEl.innerHTML = '<div class="lb-empty">尚無記錄。去挑戰吧！</div>';
@@ -226,34 +267,19 @@ function renderLeaderboard() {
   `).join('');
 }
 
-// Game Log (every round: time, round number, score — shown in settings)
-const GAME_LOG_KEY = 'cybergrab_game_log';
-const ROUND_COUNT_KEY = 'cybergrab_round_count';
-
-function getGameLog() {
-  try {
-    return JSON.parse(localStorage.getItem(GAME_LOG_KEY) || '[]');
-  } catch {
-    return [];
-  }
+function todayYmd() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-function saveGameLog(finalScore) {
-  const round = parseInt(localStorage.getItem(ROUND_COUNT_KEY) || '0', 10) + 1;
-  localStorage.setItem(ROUND_COUNT_KEY, round);
-  const now = new Date();
-  const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-  const log = getGameLog();
-  log.unshift({ round, time, score: finalScore });
-  // Keep the latest 30 rounds
-  localStorage.setItem(GAME_LOG_KEY, JSON.stringify(log.slice(0, 30)));
-}
-
+// Quick view inside the settings panel — today's rounds only.
+// The full history lives in the admin panel.
 function renderGameLog() {
   const listEl = document.getElementById('game-log-list');
-  const log = getGameLog();
+  const today = todayYmd();
+  const log = getGameLog().filter(e => e.ymd === today);
   if (log.length === 0) {
-    listEl.innerHTML = '<div class="log-empty">尚無紀錄</div>';
+    listEl.innerHTML = '<div class="log-empty">今天尚無紀錄</div>';
     return;
   }
   listEl.innerHTML = log.map(entry => `
@@ -274,6 +300,120 @@ function closeLeaderboard() {
   document.getElementById('leaderboard-modal').classList.remove('active');
 }
 
+/* ============================================================
+   Admin panel — every round grouped by day, deletable row by row
+   ============================================================ */
+const WEEKDAY_TC = ['日', '一', '二', '三', '四', '五', '六'];
+
+function prettyDay(ymd) {
+  if (!ymd) return '未記錄日期';
+  const [y, m, d] = ymd.split('-').map(Number);
+  if (!y || !m || !d) return ymd;
+  return `${y}/${String(m).padStart(2, '0')}/${String(d).padStart(2, '0')}（${WEEKDAY_TC[new Date(y, m - 1, d).getDay()]}）`;
+}
+
+// newest day first; rows inside a day are already newest-first from the log
+function groupLogByDay() {
+  const groups = new Map();
+  for (const e of getGameLog()) {
+    const key = e.ymd || '';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(e);
+  }
+  return [...groups.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
+}
+
+function renderAdmin() {
+  const listEl = document.getElementById('admin-list');
+  const sumEl = document.getElementById('admin-summary');
+  const log = getGameLog();
+
+  if (!log.length) {
+    sumEl.textContent = '尚無任何紀錄';
+    listEl.innerHTML = '<div class="admin-empty">尚無紀錄</div>';
+    return;
+  }
+
+  const days = groupLogByDay();
+  sumEl.textContent = `${days.length} 天 · 共 ${log.length} 回 · 最高 ${Math.max(...log.map(e => e.score))} 分`;
+
+  listEl.innerHTML = days.map(([ymd, rows]) => `
+    <section class="admin-day">
+      <header class="admin-day-head">
+        <span class="admin-day-date">${prettyDay(ymd)}</span>
+        <span class="admin-day-meta">${rows.length} 回 · 最高 ${Math.max(...rows.map(r => r.score))}</span>
+        <button class="admin-day-del" data-ymd="${ymd}">刪除當日</button>
+      </header>
+      ${rows.map(r => `
+        <div class="admin-row">
+          <span class="admin-time">${r.time || '--:--'}</span>
+          <span class="admin-tag">${DIFFICULTY_NAMES[r.difficulty] || r.difficulty}</span>
+          <span class="admin-score">${formatScore(r.score)}</span>
+          <button class="admin-del" data-id="${r.id}" title="刪除這筆" aria-label="刪除這筆">✕</button>
+        </div>
+      `).join('')}
+    </section>
+  `).join('');
+}
+
+// after any delete: the panel, the settings quick view and the HUD high score
+// all read from the same log, so refresh the three together
+function refreshRecordViews() {
+  renderAdmin();
+  renderGameLog();
+  renderLeaderboard();
+  updateHighScoreDisplay();
+}
+
+function downloadFile(filename, text, mime) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportStamp() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+}
+
+// CSV opens straight in Excel / Numbers. The BOM is what stops Excel from
+// turning the Chinese headers into mojibake.
+function exportRecordsCsv() {
+  const log = getGameLog();
+  if (!log.length) { updateSystemConsole('沒有紀錄可以匯出。'); return; }
+  const head = ['日期', '時間', '回合', '分數', '難度'];
+  const rows = log.map(e => [e.ymd || '', e.time || '', e.round, e.score,
+                             DIFFICULTY_NAMES[e.difficulty] || e.difficulty]);
+  const esc = v => `"${String(v).replace(/"/g, '""')}"`;
+  const csv = '\uFEFF' + [head, ...rows].map(r => r.map(esc).join(',')).join('\r\n');
+  downloadFile(`aerocatch-${exportStamp()}.csv`, csv, 'text/csv;charset=utf-8');
+  updateSystemConsole(`已匯出 ${log.length} 筆紀錄（CSV）。`);
+}
+
+// JSON keeps every field including the ids, so a file can be restored verbatim
+function exportRecordsJson() {
+  const log = getGameLog();
+  if (!log.length) { updateSystemConsole('沒有紀錄可以匯出。'); return; }
+  const payload = { exportedAt: new Date().toISOString(), rounds: log.length, records: log };
+  downloadFile(`aerocatch-${exportStamp()}.json`, JSON.stringify(payload, null, 2), 'application/json');
+  updateSystemConsole(`已匯出 ${log.length} 筆紀錄（JSON）。`);
+}
+
+function openAdmin() {
+  renderAdmin();
+  document.getElementById('admin-modal').classList.add('active');
+}
+
+function closeAdmin() {
+  document.getElementById('admin-modal').classList.remove('active');
+}
+
 // Combo Multiplier System
 let combo = 0;
 let comboTimer = 0;
@@ -281,10 +421,9 @@ const COMBO_DURATION = 1500; // 1.5s to keep combo
 let lastCatchTime = 0;
 
 // Game Configs
-let difficulty = 'hard'; // easy, medium, hard (default: hard)
+let difficulty = 'medium'; // easy, medium, hard (default: medium)
 let spawnRate = 800; // ms between spawns
-let baseGravity = 2.5; // falling speed multiplier
-let activeTheme = 'animated_svg'; // animated_svg (DEMO), cute_emoji (A), pixel_art (B), custom (C)
+let baseGravity = 2.8; // falling speed multiplier (matches 'medium')
 // Theme C: fixed GIF asset (the old custom-URL slot, now a preset)
 let customGifUrl = "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbnlhMDMxeTZnaTZsMDkwYWYxajR5MDd6Nmp2MGptNDJxb3ZtbWh3MCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/WNJ06H3d1kH6Gj7G6B/giphy.gif";
 
@@ -324,7 +463,8 @@ const SVGTemplates = {
 
 const EmojiThemeList = ['🐱', '🍓', '🎮', '⭐️', '🎈', '🍩', '🥑', '👾', '🌈', '🍦'];
 
-// Item-dropping ship: uses 1.webp if present, falls back to a built-in saucer SVG
+// Item-dropping ships: a main ship with a smaller escort trailing just behind it.
+// Both use webp art and fall back to a built-in saucer SVG if a file is missing.
 const ShipSVG = `<svg viewBox="0 0 64 32" style="width:100%;height:100%;">
   <ellipse cx="32" cy="21" rx="30" ry="9" fill="#2E4FD8" stroke="#1A1512" stroke-width="2"/>
   <ellipse cx="32" cy="12" rx="14" ry="9" fill="#F09CCB" stroke="#1A1512" stroke-width="2"/>
@@ -333,44 +473,75 @@ const ShipSVG = `<svg viewBox="0 0 64 32" style="width:100%;height:100%;">
   <circle cx="50" cy="21" r="2.5" fill="#FFB020"/>
 </svg>`;
 
-let shipEl = null;
-let shipX = 0.5;        // normalized 0~1 across the game viewport
-let shipBottomPx = 176; // ship belly line inside the viewport — items drop from here
+const SHIP_MAIN_HEIGHT = 336;  // main ship box height (grows upward from its belly line)
+const SHIP_SUB_HEIGHT = 116;   // escort box height
+const DROP_LINE_MIN = 176;     // highest belly line for the main ship
+const SUB_OFFSET_X = 0.28;     // escort trails this far behind (right of) the main ship
+const SUB_OFFSET_Y = 64;       // ...and sits this many px higher up, i.e. further away
+const SUB_FOLLOW_MS = 190;     // escort blinks into formation one beat after the main ship
+const MAIN_DROP_SHARE = 0.58;  // how often the next item comes from the main ship
 
-const SHIP_HEIGHT = 336;      // rendered ship height (grows upward from the belly line)
-const DROP_LINE_MIN = 176;    // highest belly line (same baseline as before the upscale)
+// The fleet: [0] = main ship, [1] = escort.
+// Each entry is { el, x (0~1 across the viewport), bottomPx (belly = drop line), height }
+const ships = [];
+let subFollowTimer = null;
 
 function createShip() {
-  shipEl = document.createElement('div');
-  shipEl.id = 'game-ship';
-  const img = document.createElement('img');
-  img.src = 'public/images/1.webp';
-  img.alt = '';
-  img.onerror = () => { shipEl.innerHTML = ShipSVG; };
-  shipEl.appendChild(img);
-  // Lives on the page top layer (fixed) so it can overflow the game frame
-  document.body.appendChild(shipEl);
+  ships.length = 0;
+  ships.push(buildShip('game-ship', 'public/images/ship-main.webp', SHIP_MAIN_HEIGHT));
+  ships.push(buildShip('game-ship-sub', 'public/images/ship-sub.webp', SHIP_SUB_HEIGHT));
   scheduleShipTeleport();
 }
 
-// Blink-teleport: jump to a random spot; the ship belly (= drop line) stays
-// within the top third of the screen so players can't camp under the ship.
-// The oversized body floats above the game frame, overflowing it freely.
-function teleportShip() {
-  if (!shipEl || viewportWidth <= 0) return;
-  shipX = 0.08 + Math.random() * 0.84;
-  const bottomMax = Math.max(DROP_LINE_MIN, viewportHeight / 3);
-  shipBottomPx = DROP_LINE_MIN + Math.random() * (bottomMax - DROP_LINE_MIN);
+function buildShip(id, src, height) {
+  const el = document.createElement('div');
+  el.id = id;
+  el.className = 'game-ship';
+  const img = document.createElement('img');
+  img.src = src;
+  img.alt = '';
+  img.onerror = () => { el.innerHTML = ShipSVG; };
+  el.appendChild(img);
+  // Lives on the page top layer (fixed) so it can overflow the game frame
+  document.body.appendChild(el);
+  return { el, x: 0.5, bottomPx: DROP_LINE_MIN, height };
+}
 
-  // Convert viewport-local coords to page coords (ship is position: fixed)
+// Blink-teleport: the main ship jumps to a random spot and the escort blinks in
+// just behind it. Both belly lines (= their drop lines) stay within the top third
+// of the screen so players can't camp underneath. The oversized bodies float above
+// the game frame, overflowing it freely.
+// The main ship's x is capped short of the right edge so the escort always has
+// room to sit behind it; between them the pair still covers the full width.
+function teleportShip() {
+  const main = ships[0];
+  const sub = ships[1];
+  if (!main || viewportWidth <= 0) return;
+
+  main.x = 0.06 + Math.random() * 0.60;
+  const bottomMax = Math.max(DROP_LINE_MIN, viewportHeight / 3);
+  main.bottomPx = DROP_LINE_MIN + Math.random() * (bottomMax - DROP_LINE_MIN);
+  placeShip(main);
+
+  if (sub) {
+    sub.x = main.x + SUB_OFFSET_X;
+    sub.bottomPx = main.bottomPx - SUB_OFFSET_Y;
+    clearTimeout(subFollowTimer);
+    subFollowTimer = setTimeout(() => placeShip(sub), SUB_FOLLOW_MS);
+  }
+}
+
+// Drop one ship onto its stored spot and flicker it in
+function placeShip(ship) {
+  // Convert viewport-local coords to page coords (ships are position: fixed)
   const rect = document.getElementById('game-viewport').getBoundingClientRect();
-  shipEl.style.left = `${rect.left + shipX * viewportWidth}px`;
-  shipEl.style.top = `${rect.top + shipBottomPx - SHIP_HEIGHT}px`;
+  ship.el.style.left = `${rect.left + ship.x * viewportWidth}px`;
+  ship.el.style.top = `${rect.top + ship.bottomPx - ship.height}px`;
 
   // Flicker effect on arrival
-  shipEl.classList.remove('blink');
-  void shipEl.offsetWidth;
-  shipEl.classList.add('blink');
+  ship.el.classList.remove('blink');
+  void ship.el.offsetWidth;
+  ship.el.classList.add('blink');
 }
 
 function scheduleShipTeleport() {
@@ -378,91 +549,42 @@ function scheduleShipTeleport() {
   setTimeout(scheduleShipTeleport, 700 + Math.random() * 1300);
 }
 
-// Bonus items 2/3/4.webp: rarer than bombs, worth +30
+// Pick which ship lets the next item go — the main ship drops a little more often
+function pickDroppingShip() {
+  const visible = ships.filter(s => s.el.style.display !== 'none');
+  if (visible.length < 2) return visible[0] || null;
+  return Math.random() < MAIN_DROP_SHARE ? visible[0] : visible[1];
+}
+
+// Small recoil kick so you can see which ship let go
+function shipDrop(ship) {
+  ship.el.classList.remove('drop');
+  void ship.el.offsetWidth;
+  ship.el.classList.add('drop');
+}
+
+// Bonus items: rarer than bombs, worth +30.
+// Falling items render at 50-70px, so these sources are 128px. The full-size
+// char-*.webp are no longer loaded by anything — they fed the corner mascot,
+// which went away with themes A/B/C. drop-koala.webp is spare, unused for now.
 const BONUS_VALUE = 30;
-const BonusWebpList = ['public/images/2.webp', 'public/images/3.webp', 'public/images/4.webp'];
-
-// Theme config — DEMO uses the top ship + all 3 bonus webps.
-// Themes A/B/C are character-exclusive: one mascot in the bottom-right corner,
-// and the only bonus item that appears is that theme's own character webp.
-const THEME_CONFIG = {
-  animated_svg: { character: null },                    // DEMO
-  themeA:       { character: 'public/images/2.webp' },  // 角色 A
-  themeB:       { character: 'public/images/3.webp' },  // 角色 B
-  themeC:       { character: 'public/images/4.webp' }   // 角色 C
-};
-
-function isDemoTheme() { return activeTheme === 'animated_svg'; }
-
-// Bottom-right corner mascot for the A/B/C theme zones
-let mascotEl = null;
-let mascotBubbleEl = null;
-let bubbleHideTimer = null;
-
-// Random one-liners the mascot blurts out
-const MASCOT_LINES = [
-  '接住啊！', '手滑了唷～', '這顆給你', '小心有炸的', '再快一點嘛',
-  '哎呀沒接到', '寶物來囉', '別發呆', '手張開我就丟', '你行不行啊',
-  '差一點點', '穩住穩住', '看我的', '嘿咻！'
+const BonusWebpList = [
+  'public/images/drop-captain.webp',
+  'public/images/drop-sailor.webp',
+  'public/images/drop-mouse.webp'
 ];
 
-function createMascot() {
-  mascotEl = document.createElement('div');
-  mascotEl.id = 'game-mascot';
-  mascotEl.innerHTML = '<img alt="">';
-  mascotEl.style.display = 'none';
-  document.getElementById('game-viewport').appendChild(mascotEl);
-
-  mascotBubbleEl = document.createElement('div');
-  mascotBubbleEl.id = 'mascot-bubble';
-  document.getElementById('game-viewport').appendChild(mascotBubbleEl);
-
-  scheduleMascotBubble();
-}
-
-function showMascotBubble() {
-  if (!mascotBubbleEl || isDemoTheme() || !mascotEl || mascotEl.style.display === 'none') return;
-  mascotBubbleEl.textContent = MASCOT_LINES[Math.floor(Math.random() * MASCOT_LINES.length)];
-  mascotBubbleEl.classList.add('show');
-  clearTimeout(bubbleHideTimer);
-  bubbleHideTimer = setTimeout(() => mascotBubbleEl.classList.remove('show'), 2400);
-}
-
-// Periodically pop a random line while in a theme zone
-function scheduleMascotBubble() {
-  if (!isDemoTheme()) showMascotBubble();
-  setTimeout(scheduleMascotBubble, 3500 + Math.random() * 3000);
-}
-
-// Show the ship (DEMO) or the corner mascot (A/B/C), and set its image
-function applyThemeVisuals() {
-  const cfg = THEME_CONFIG[activeTheme] || THEME_CONFIG.animated_svg;
-  if (shipEl) shipEl.style.display = isDemoTheme() ? '' : 'none';
-  if (mascotEl) {
-    if (isDemoTheme() || !cfg.character) {
-      mascotEl.style.display = 'none';
-      if (mascotBubbleEl) mascotBubbleEl.classList.remove('show');
-    } else {
-      mascotEl.querySelector('img').src = cfg.character;
-      mascotEl.style.display = '';
-    }
-  }
-}
-
-// Rebuild the scoring legend for the current theme:
-//  DEMO  → all 3 bonus webps; A/B/C → only that theme's own character
+// Scoring legend (rendered into a hidden node; kept so the rows can be
+// switched back on without rebuilding them)
 function renderLegend() {
   const bodyEl = document.getElementById('legend-body');
   const titleEl = document.getElementById('legend-title');
   if (!bodyEl) return;
 
-  const cfg = THEME_CONFIG[activeTheme] || THEME_CONFIG.animated_svg;
-  const bonusSrcs = isDemoTheme() ? BonusWebpList : [cfg.character];
-
   const starSvg = `<svg viewBox="0 0 24 24" style="width:100%;height:100%;"><polygon points="12,2 15,9 22,9 17,14 19,21 12,17 5,21 7,14 2,9 9,9" fill="var(--blue)"/><circle cx="12" cy="12" r="2" fill="#fff"/></svg>`;
   const bombSvg = `<svg viewBox="0 0 24 24" style="width:100%;height:100%;"><circle cx="11" cy="14" r="8.5" fill="#1A1512" stroke="#D63030" stroke-width="1.5"/><rect x="9.8" y="4.2" width="2.6" height="3.2" rx="0.6" fill="#6B6560"/><circle cx="18" cy="1.9" r="1.4" fill="#FFB020"/></svg>`;
 
-  const bonusRows = bonusSrcs.map(src => `
+  const bonusRows = BonusWebpList.map(src => `
     <div class="legend-row plus">
       <div class="legend-icon"><img src="${src}" alt=""></div>
       <div class="legend-text"><span class="legend-name">加分寶物</span><span class="legend-val plus">+30</span></div>
@@ -480,19 +602,16 @@ function renderLegend() {
     </div>
     <p class="legend-tip">✊ 握拳碰到才算抓取<br>🖐️ 張開手掌召喚落物</p>`;
 
-  if (titleEl) titleEl.textContent = `圖鑑 · ${themeName(activeTheme)}`;
+  if (titleEl) titleEl.textContent = '圖鑑 SCORING';
 }
 
-// Mascot reacts when it "throws out" a treasure (open-hand summon)
-function mascotThrow() {
-  if (!mascotEl || isDemoTheme()) return;
-  mascotEl.classList.remove('throw');
-  void mascotEl.offsetWidth;
-  mascotEl.classList.add('throw');
-  if (Math.random() < 0.35) showMascotBubble();
-}
+// Spawn mix, shared by every theme. These two are independent shares of each
+// spawn; whatever is left over becomes a normal treasure. Keep them separate —
+// they used to be written as two overlapping thresholds, where nudging the bomb
+// share silently moved the bonus share with it.
+const BOMB_CHANCE = 0.15;   // was 0.20
+const BONUS_CHANCE = 0.10;  // unchanged
 
-// Penalty bomb (appears in every theme, ratio 4 normal : 1 bomb)
 const BOMB_PENALTY = -30;
 const BombSVG = `<svg viewBox="0 0 24 24" style="width:100%;height:100%;">
   <circle cx="11" cy="14" r="8.5" fill="#1A1512" stroke="#D63030" stroke-width="1.5"/>
@@ -526,15 +645,6 @@ function updateSystemConsole(message) {
 }
 
 // ---- Shared setters (used by the in-game settings AND the operator console) ----
-function setActiveTheme(theme) {
-  activeTheme = theme;
-  const sel = document.getElementById('theme-select');
-  if (sel) sel.value = theme;
-  applyThemeVisuals();
-  renderLegend();
-  updateHighScoreDisplay();
-}
-
 function setDifficulty(value) {
   difficulty = value;
   const sel = document.getElementById('difficulty-select');
@@ -562,7 +672,6 @@ function initOperatorChannel() {
     const m = ev.data || {};
     if (m.kind !== 'cmd') return;
     switch (m.cmd) {
-      case 'setTheme':      setActiveTheme(m.value); updateSystemConsole(`（遙控）主題：${themeName(m.value)}`); break;
       case 'setDifficulty': setDifficulty(m.value);  updateSystemConsole(`（遙控）難度已切換`); break;
       case 'setDuration':   setDuration(m.value);    updateSystemConsole(`（遙控）遊戲時間 ${gameDuration}s`); break;
       case 'start':         if (!isPlaying) startGame(); break;
@@ -578,14 +687,12 @@ function broadcastStatus() {
   if (!opChannel) return;
   opChannel.postMessage({
     kind: 'status',
-    theme: activeTheme,
-    themeLabel: themeName(activeTheme),
     score: score,
     timer: timer,
     playing: isPlaying,
     duration: gameDuration,
     difficulty: difficulty,
-    high: getHighScore(activeTheme)
+    high: getHighScore()
   });
 }
 
@@ -618,10 +725,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initialize MediaPipe Hands
   initMediaPipe();
 
-  // Item-dropping ship (DEMO) + corner mascot (A/B/C themes)
+  // Item-dropping ships
   createShip();
-  createMascot();
-  applyThemeVisuals();
   renderLegend();
 
   // Link to the operator console (hidden control window on the laptop)
@@ -640,20 +745,6 @@ function setupEventListeners() {
     // Hide game over screen, reset game
     document.getElementById('game-over-overlay').classList.remove('active');
     startGame();
-  });
-
-  // Theme change
-  const themeSelect = document.getElementById('theme-select');
-  themeSelect.addEventListener('change', (e) => {
-    setActiveTheme(e.target.value);
-    updateSystemConsole(`主題切換為：${themeSelect.options[themeSelect.selectedIndex].text}`);
-  });
-
-  // Game duration change (30 / 60 / 90 seconds)
-  const durationSelect = document.getElementById('duration-select');
-  durationSelect.addEventListener('change', (e) => {
-    setDuration(e.target.value);
-    updateSystemConsole(`遊戲時間已設為 ${gameDuration} 秒`);
   });
 
   // Difficulty change
@@ -684,21 +775,29 @@ function setupEventListeners() {
     }
   });
 
-  // Manual calibrate / reset
-  document.getElementById('btn-calibrate').addEventListener('click', () => {
+  // Manual calibrate / reset — same action from the header and from settings
+  const resetTracking = () => {
     updateSystemConsole("重新校準手勢辨識與影像流...");
     synth.playTone(200, 'sine', 0.1, 0.05);
-    
-    // Clear elements
+
     clearFallingItems();
     combo = 0;
     document.getElementById('combo-multiplier').textContent = 'x1';
     document.getElementById('combo-progress').style.width = '0%';
-    
-    // Restart active camera
+
     const currentCam = camSelect.value;
-    if (currentCam) {
-      startCameraStream(currentCam);
+    if (currentCam) startCameraStream(currentCam);
+  };
+  document.getElementById('btn-calibrate').addEventListener('click', resetTracking);
+  document.getElementById('btn-reset').addEventListener('click', resetTracking);
+
+  // F5 resets the camera instead of reloading the page. A real reload re-fetches
+  // the MediaPipe model from the CDN and costs seconds — not something you want
+  // to trigger by reflex mid-event. Cmd/Ctrl+R still does a full reload.
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'F5' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      e.preventDefault();
+      resetTracking();
     }
   });
   // Leaderboard buttons
@@ -706,11 +805,48 @@ function setupEventListeners() {
   document.getElementById('btn-game-over-leaderboard').addEventListener('click', openLeaderboard);
   document.getElementById('btn-lb-close').addEventListener('click', closeLeaderboard);
   document.getElementById('btn-lb-clear').addEventListener('click', () => {
-    if (confirm(`確定要清除「${themeName(activeTheme)}」的排行榜記錄嗎？`)) {
-      localStorage.removeItem(lbKey(activeTheme));
-      renderLeaderboard();
-      updateSystemConsole(`${themeName(activeTheme)} 排行榜記錄已清除。`);
+    // the board is derived from the log, so clearing it means deleting the rounds
+    if (confirm('確定要清除所有紀錄嗎？\n排行榜和最高分都會一起歸零。')) {
+      clearAllRecords();
+      refreshRecordViews();
+      updateSystemConsole('所有紀錄已清除。');
     }
+  });
+
+  // ---- Admin record panel ----
+  document.getElementById('btn-admin').addEventListener('click', openAdmin);
+  document.getElementById('btn-admin-close').addEventListener('click', closeAdmin);
+  document.getElementById('btn-admin-done').addEventListener('click', closeAdmin);
+  document.getElementById('admin-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'admin-modal') closeAdmin();
+  });
+
+  // one delegated handler covers every row and day button in the list
+  document.getElementById('admin-list').addEventListener('click', (e) => {
+    const oneBtn = e.target.closest('.admin-del');
+    const dayBtn = e.target.closest('.admin-day-del');
+    if (oneBtn) {
+      deleteLogEntry(oneBtn.dataset.id);
+      updateSystemConsole('已刪除 1 筆紀錄。');
+    } else if (dayBtn) {
+      const ymd = dayBtn.dataset.ymd;
+      if (!confirm(`確定要刪除 ${prettyDay(ymd)} 的所有紀錄嗎？`)) return;
+      deleteLogDay(ymd);
+      updateSystemConsole(`${prettyDay(ymd)} 的紀錄已刪除。`);
+    } else {
+      return;
+    }
+    refreshRecordViews();
+  });
+
+  document.getElementById('btn-admin-csv').addEventListener('click', exportRecordsCsv);
+  document.getElementById('btn-admin-json').addEventListener('click', exportRecordsJson);
+
+  document.getElementById('btn-admin-clear').addEventListener('click', () => {
+    if (!confirm('確定要清空「全部」紀錄嗎？\n排行榜與各主題最高分都會歸零，且無法復原。')) return;
+    clearAllRecords();
+    refreshRecordViews();
+    updateSystemConsole('所有紀錄已清空。');
   });
 
   // Close modal when clicking backdrop
@@ -767,23 +903,32 @@ function adjustCanvasSize() {
 
   // Backing buffer is capped and keeps the display's aspect ratio
   const scale = Math.min(1, CANVAS_MAX_WIDTH / Math.max(1, viewportWidth));
-  canvasElement.width = Math.round(viewportWidth * scale);
-  canvasElement.height = Math.round(viewportHeight * scale);
+  const w = Math.round(viewportWidth * scale);
+  const h = Math.round(viewportHeight * scale);
+
+  // Assigning canvas.width/height reallocates AND wipes the backing buffer even
+  // when the value is unchanged, so only touch it on a real size change. This
+  // runs once per detected frame, and the ResizeObserver covers actual resizes.
+  if (w !== canvasElement.width || h !== canvasElement.height) {
+    canvasElement.width = w;
+    canvasElement.height = h;
+  }
 }
 
 // Change gravity and spawn configs based on difficulty
 function adjustDifficultySettings() {
   switch (difficulty) {
+    // spawn intervals are the previous pass divided by 1.5 -> 1.5x the loot
     case 'easy':
-      spawnRate = 1200;
+      spawnRate = 640;
       baseGravity = 1.6;
       break;
     case 'medium':
-      spawnRate = 800;
+      spawnRate = 427;
       baseGravity = 2.8;
       break;
     case 'hard':
-      spawnRate = 500;
+      spawnRate = 267;
       baseGravity = 4.2;
       break;
   }
@@ -833,6 +978,12 @@ async function loadCameraDevices() {
   }
 }
 
+// Capture size. MediaPipe resizes to its own working resolution internally, so
+// this only really sets how sharp the background video looks — drop it to
+// 480x360 if the show laptop is struggling.
+const CAMERA_WIDTH = 640;
+const CAMERA_HEIGHT = 480;
+
 // Start camera capture stream
 let activeStream = null;
 let isProcessingFrame = false;
@@ -842,24 +993,45 @@ async function startCameraStream(deviceId) {
     activeStream.getTracks().forEach(track => track.stop());
   }
 
+  // `max` as well as `ideal`: with `ideal` alone a 2K/4K camera that has no
+  // small capture mode can hand back its native stream, and every frame then
+  // costs a full-resolution decode + downscale. The max makes the browser
+  // pick the smallest mode it can and scale down inside the capture pipeline.
   const constraints = {
     video: {
       deviceId: { exact: deviceId },
-      width: { ideal: 640 },
-      height: { ideal: 480 }
+      width: { ideal: CAMERA_WIDTH, max: CAMERA_WIDTH },
+      height: { ideal: CAMERA_HEIGHT, max: CAMERA_HEIGHT },
+      frameRate: { ideal: DETECT_FPS, max: DETECT_FPS }
     }
   };
 
   try {
-    activeStream = await navigator.mediaDevices.getUserMedia(constraints);
+    try {
+      activeStream = await navigator.mediaDevices.getUserMedia(constraints);
+    } catch (err) {
+      // `max` is a MANDATORY constraint: a camera with no capture mode at or
+      // below the cap can make getUserMedia reject outright instead of just
+      // downscaling. Losing the camera entirely mid-event is far worse than a
+      // heavier stream, so fall back to the soft request.
+      if (err && (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError')) {
+        updateSystemConsole('相機不支援 640x480，改用預設規格（負擔會略高）。');
+        activeStream = await navigator.mediaDevices.getUserMedia({
+          video: { deviceId: { exact: deviceId }, width: { ideal: CAMERA_WIDTH }, height: { ideal: CAMERA_HEIGHT } }
+        });
+      } else {
+        throw err;
+      }
+    }
     videoElement.srcObject = activeStream;
     videoElement.onloadedmetadata = () => {
       videoElement.play();
       adjustCanvasSize();
-      updateSystemConsole("相機串流載入完成，正在等待手勢模組初始化...");
+      updateSystemConsole(`相機串流載入完成（${cameraSettingsLabel()}），正在等待手勢模組初始化...`);
       
-      // Start frame loop processing
+      // Two independent loops: detection (throttled) and rendering (display rate)
       requestAnimationFrame(processVideoFrame);
+      startGameLoop();
     };
   } catch (e) {
     console.error("startCameraStream error:", e);
@@ -867,10 +1039,32 @@ async function startCameraStream(deviceId) {
   }
 }
 
+// Hand detection runs on its own budget, capped well below the display rate.
+// Left uncapped it will happily eat every millisecond of the main thread and
+// starve rendering; 30Hz tracking under a 60Hz render loop feels smoother than
+// both fighting over the same frame.
+const DETECT_FPS = 30;
+const DETECT_INTERVAL_MS = 1000 / DETECT_FPS;
+let lastDetectTime = 0;
+
+// What the browser actually handed back, which can differ from what we asked
+// for. Worth checking on site when a new camera is plugged in.
+function cameraSettingsLabel() {
+  const track = activeStream && activeStream.getVideoTracks()[0];
+  if (!track || !track.getSettings) return '未知規格';
+  const st = track.getSettings();
+  const fps = st.frameRate ? `${Math.round(st.frameRate)}fps` : '?fps';
+  return `${st.width || '?'}x${st.height || '?'} @ ${fps}`;
+}
+
 // Core processing loops for camera frames to MediaPipe
 async function processVideoFrame() {
   if (activeStream && !videoElement.paused && !videoElement.ended) {
-    if (!isProcessingFrame && handsInstance) {
+    const now = performance.now();
+    // Interval is measured start-to-start: if inference itself takes longer than
+    // the budget it simply runs back-to-back, guarded by isProcessingFrame.
+    if (!isProcessingFrame && handsInstance && now - lastDetectTime >= DETECT_INTERVAL_MS) {
+      lastDetectTime = now;
       isProcessingFrame = true;
       try {
         await handsInstance.send({ image: videoElement });
@@ -891,9 +1085,13 @@ function initMediaPipe() {
 
   handsInstance.setOptions({
     maxNumHands: 1,
-    modelComplexity: 1,
+    // 0 = the "lite" model: roughly half the inference cost of complexity 1.
+    // Open-palm vs fist on large targets doesn't need the heavier model.
+    modelComplexity: 0,
     minDetectionConfidence: 0.6,
-    minTrackingConfidence: 0.6
+    // Lower tracking confidence keeps MediaPipe on the cheap landmark-tracking
+    // path instead of falling back to the expensive palm detector as often.
+    minTrackingConfidence: 0.5
   });
 
   handsInstance.onResults(onHandResults);
@@ -911,20 +1109,15 @@ function onHandResults(results) {
     // Dismiss loading overlay
     document.getElementById('loading-overlay').classList.remove('active');
     document.getElementById('start-overlay').classList.add('active');
-    updateSystemConsole("系統初始化完畢，隨時可啟動系統。");
+    updateSystemConsole("準備完成，隨時可以出航。");
   }
 
   adjustCanvasSize();
-  
-  // Clear canvas
-  canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-  // Draw Camera image MIRRORED on canvas
-  canvasCtx.save();
-  canvasCtx.translate(canvasElement.width, 0);
-  canvasCtx.scale(-1, 1);
-  canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-  canvasCtx.restore();
+  // The <video> is mirrored by CSS and composited by the browser, so the whole
+  // frame no longer gets redrawn into this canvas every detection. The canvas
+  // is now a transparent overlay carrying only the skeleton.
+  canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
   // If hands are tracked, draw skeleton overlay & detect gesture
   if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
@@ -952,22 +1145,12 @@ function onHandResults(results) {
       y: pt.y * viewportHeight
     }));
 
-    if (!smoothHandX && !smoothHandY) {
-      smoothHandX = rawHandX;
-      smoothHandY = rawHandY;
-    } else {
-      // Smooth tracking coordinates
-      smoothHandX += (rawHandX - smoothHandX) * 0.35;
-      smoothHandY += (rawHandY - smoothHandY) * 0.35;
-    }
-
     // Draw futuristic cyber skeleton on the mirrored canvas
     drawCyberSkeleton(landmarks);
 
-    // Position pointer reticle overlay
-    const handPointer = document.getElementById('hand-pointer');
-    handPointer.style.left = `${smoothHandX}px`;
-    handPointer.style.top = `${smoothHandY}px`;
+    // Reticle appearance only — its position is interpolated every rendered
+    // frame in updateHandPointer(), so it glides instead of stepping at 30Hz
+    const handPointer = getHandPointer();
     handPointer.className = 'pointer-shown';
     
     if (currentGesture === 'fist') {
@@ -980,22 +1163,86 @@ function onHandResults(results) {
     isHandPresent = false;
     currentGesture = 'unknown';
     handPoints = [];
-    document.getElementById('hand-pointer').className = 'pointer-hidden';
+    getHandPointer().className = 'pointer-hidden';
     updateGestureHUD();
   }
+  // Item spawning and physics deliberately do NOT run here — see gameFrame()
+}
 
-  // If playing, spawn items when open hand, update items positions and collisions
-  if (isPlaying) {
-    if (isHandPresent && currentGesture === 'open') {
-      const now = Date.now();
-      if (now - lastSpawnTime > spawnRate) {
-        spawnFallingItem();
-        lastSpawnTime = now;
-      }
+/* ============================================================
+   Render loop — independent of hand detection
+   ============================================================
+   Physics used to be driven by onHandResults, so item motion was locked to the
+   detector's rate: slow inference meant visibly choppy items, and a faster
+   machine literally made the game harder. This loop runs at the display rate
+   and scales every movement by elapsed time instead of frame count.          */
+
+// Per-frame speeds in this file were tuned against the old detection rate, so
+// they're normalised back to it. Lower this if the game now feels faster than
+// it used to on the show laptop; raise it if it feels slower.
+const TUNING_FPS = 30;
+const HAND_SMOOTHING = 0.35;   // reticle lerp, per reference frame
+const MAX_FRAME_DELTA = 0.1;   // 10fps floor; guards against tab-stall jumps
+
+let gameRafId = null;
+let lastFrameTime = 0;
+let handPointerEl = null;
+
+function getHandPointer() {
+  if (!handPointerEl) handPointerEl = document.getElementById('hand-pointer');
+  return handPointerEl;
+}
+
+function startGameLoop() {
+  if (gameRafId !== null) return;
+  lastFrameTime = performance.now();
+  gameRafId = requestAnimationFrame(gameFrame);
+}
+
+function gameFrame(now) {
+  gameRafId = requestAnimationFrame(gameFrame);
+
+  // Seconds since the last painted frame. Clamped so a backgrounded tab or a
+  // long GC pause can't teleport every item down the screen in one step.
+  // The floor is 10fps, not 20 — a struggling laptop can genuinely render below
+  // 20fps, and clamping there would quietly slow the whole game back down.
+  const dt = Math.min((now - lastFrameTime) / 1000, MAX_FRAME_DELTA);
+  lastFrameTime = now;
+
+  updateHandPointer(dt);
+  if (!isPlaying) return;
+
+  // Open hand keeps summoning loot; the ships decide where it comes from
+  if (isHandPresent && currentGesture === 'open') {
+    const t = Date.now();
+    if (t - lastSpawnTime > spawnRate) {
+      spawnFallingItem();
+      lastSpawnTime = t;
     }
-    
-    updateGameLogic();
   }
+
+  updateGameLogic(dt);
+}
+
+// Glide the reticle toward the latest detected palm position
+function updateHandPointer(dt) {
+  if (!isHandPresent) return;
+
+  if (!smoothHandX && !smoothHandY) {
+    smoothHandX = rawHandX;
+    smoothHandY = rawHandY;
+  } else {
+    // Frame-rate independent exponential smoothing — same feel as the old
+    // 0.35-per-frame lerp, but expressed as a time constant so it doesn't get
+    // snappier just because the display refreshes faster.
+    const alpha = 1 - Math.pow(1 - HAND_SMOOTHING, dt * TUNING_FPS);
+    smoothHandX += (rawHandX - smoothHandX) * alpha;
+    smoothHandY += (rawHandY - smoothHandY) * alpha;
+  }
+
+  const pointer = getHandPointer();
+  pointer.style.left = `${smoothHandX}px`;
+  pointer.style.top = `${smoothHandY}px`;
 }
 
 // Classify gesture using finger extended calculations
@@ -1096,15 +1343,15 @@ function drawCyberSkeleton(landmarks) {
   canvasCtx.lineJoin = 'round';
   
   // Select color scheme based on gesture
-  let glowColor = 'rgba(0, 240, 255, 0.9)'; // blue for open/neutral
-  let strokeStyle = '#00f0ff';
-  
+  let glowColor = 'rgba(62, 143, 132, 0.85)'; // sailor teal for neutral
+  let strokeStyle = '#3E8F84';
+
   if (currentGesture === 'fist') {
-    glowColor = 'rgba(255, 0, 127, 0.95)'; // pink for fist
-    strokeStyle = '#ff007f';
+    glowColor = 'rgba(224, 135, 154, 0.9)';   // rose for fist
+    strokeStyle = '#E0879A';
   } else if (currentGesture === 'open') {
-    glowColor = 'rgba(57, 255, 20, 0.95)'; // green for active summoning
-    strokeStyle = '#39ff14';
+    glowColor = 'rgba(143, 179, 92, 0.9)';    // sage for active summoning
+    strokeStyle = '#8FB35C';
   }
 
   canvasCtx.shadowColor = glowColor;
@@ -1129,7 +1376,7 @@ function drawCyberSkeleton(landmarks) {
   const tips = [4, 8, 12, 16, 20];
 
   // White knuckle nodes (single fill)
-  canvasCtx.fillStyle = '#ffffff';
+  canvasCtx.fillStyle = '#FFFCF7';
   canvasCtx.beginPath();
   for (let i = 0; i < landmarks.length; i++) {
     if (tips.includes(i)) continue;
@@ -1140,8 +1387,8 @@ function drawCyberSkeleton(landmarks) {
   canvasCtx.fill();
 
   // Yellow finger tips (single fill)
-  canvasCtx.fillStyle = '#fffb00';
-  canvasCtx.shadowColor = 'rgba(255, 251, 0, 0.8)';
+  canvasCtx.fillStyle = '#C89544';
+  canvasCtx.shadowColor = 'rgba(200, 149, 68, 0.8)';
   canvasCtx.beginPath();
   for (const i of tips) {
     const x = px(i), y = py(i);
@@ -1213,7 +1460,7 @@ function startGame() {
 
     // Audio chime
     synth.playStart();
-    updateSystemConsole('遊戲開始！張開手掌以召喚物品，握緊拳頭去抓取它！');
+    updateSystemConsole('出航！張開手掌召喚秘寶，握緊拳頭抓住它！');
 
     // Timer loop
     if (timerInterval) clearInterval(timerInterval);
@@ -1252,23 +1499,16 @@ function endGame() {
   // Show score
   document.getElementById('final-score-value').textContent = score;
   
-  // Check High Score (per current theme)
-  const recordTag = document.getElementById('new-high-score-msg');
-  if (score > getHighScore(activeTheme)) {
-    localStorage.setItem(highKey(activeTheme), score);
-    updateHighScoreDisplay();
-    recordTag.classList.remove('hidden');
-  } else {
-    recordTag.classList.add('hidden');
-  }
-
-  // Save to leaderboard
-  if (score > 0) {
-    saveToLeaderboard(score);
-  }
-
-  // Log this round (time / round number / score)
+  // Read the old best BEFORE logging this round — the high score and the
+  // leaderboard are both derived from the log now, so the round has to be
+  // written first and everything else recomputed from it.
+  const prevHigh = getHighScore();
   saveGameLog(score);
+  updateHighScoreDisplay();
+
+  const recordTag = document.getElementById('new-high-score-msg');
+  if (score > 0 && score > prevHigh) recordTag.classList.remove('hidden');
+  else recordTag.classList.add('hidden');
 
   // Clear items remaining
   clearFallingItems();
@@ -1297,18 +1537,17 @@ function spawnFallingItem() {
   itemEl.style.width = `${size}px`;
   itemEl.style.height = `${size}px`;
   
-  // Position:
-  //  DEMO  → drop from the ship's belly line, at the ship's current x
-  //  A/B/C → the mascot "throws" from the corner, but loot still rains from
-  //          the top at a random x (easier to catch)
+  // Loot drops from whichever ship is chosen; if the fleet somehow isn't up yet
+  // it rains from the top at a random x instead.
   let x, y;
-  if (isDemoTheme() && shipEl) {
-    x = shipX * viewportWidth;
-    y = shipBottomPx + size / 2;
+  const dropper = pickDroppingShip();
+  if (dropper) {
+    x = dropper.x * viewportWidth;
+    y = dropper.bottomPx + size / 2;
+    shipDrop(dropper);
   } else {
     x = (0.1 + Math.random() * 0.8) * viewportWidth;
     y = -size / 2;
-    mascotThrow();
   }
 
   itemEl.style.left = `${x}px`;
@@ -1319,18 +1558,16 @@ function spawnFallingItem() {
   let elementContent = "";
   let isBonus = false;
 
-  // Spawn roll — bomb 20%, bonus 10%, otherwise a normal treasure
+  // Spawn roll — bomb, then bonus, otherwise a normal treasure
   const roll = Math.random();
-  const isBomb = roll < 0.2;
-  isBonus = !isBomb && roll < 0.3;
+  const isBomb = roll < BOMB_CHANCE;
+  isBonus = !isBomb && roll < BOMB_CHANCE + BONUS_CHANCE;
   if (isBomb) {
     elementContent = BombSVG;
     value = BOMB_PENALTY;
     itemEl.classList.add('bomb');
   } else if (isBonus) {
-    // DEMO: any of the 3 webps; a theme: only that theme's own character
-    const cfg = THEME_CONFIG[activeTheme] || THEME_CONFIG.animated_svg;
-    const bonusSrc = cfg.character || BonusWebpList[Math.floor(Math.random() * BonusWebpList.length)];
+    const bonusSrc = BonusWebpList[Math.floor(Math.random() * BonusWebpList.length)];
     elementContent = `<img src="${bonusSrc}" alt="">`;
     value = BONUS_VALUE;
     itemEl.classList.add('bonus');
@@ -1374,9 +1611,12 @@ function spawnFallingItem() {
   });
 }
 
-// Update physics, positions and evaluate grab captures
-function updateGameLogic() {
+// Update physics, positions and evaluate grab captures.
+// dt is seconds since the last rendered frame; `step` is that expressed in
+// reference frames, so the per-frame constants below keep their original values.
+function updateGameLogic(dt) {
   const now = Date.now();
+  const step = dt * TUNING_FPS;
   
   // Decay combo multiplier if time expired
   if (combo > 0) {
@@ -1396,12 +1636,12 @@ function updateGameLogic() {
     const item = gameItems[i];
     
     // Apply gravity
-    item.y += item.speed;
+    item.y += item.speed * step;
     
     // Apply horizontal sinusoidal sway
-    item.swayOffset += item.swaySpeed;
+    item.swayOffset += item.swaySpeed * step;
     const dx = Math.sin(item.swayOffset) * item.swayAmount;
-    item.x += dx;
+    item.x += dx * step;
     
     // Bind x bounds
     if (item.x < item.size/2) item.x = item.size/2;
@@ -1551,7 +1791,7 @@ function createComboBanner(x, y, comboCount) {
 function createParticleExplosion(x, y) {
   const container = document.getElementById('falling-items-container');
   const numParticles = 12;
-  const colors = ['#00f0ff', '#ff007f', '#39ff14', '#fffb00'];
+  const colors = ['#3E8F84', '#E0879A', '#8FB35C', '#C89544'];
   
   for (let i = 0; i < numParticles; i++) {
     const particle = document.createElement('div');

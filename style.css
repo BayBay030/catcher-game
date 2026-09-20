@@ -1,47 +1,55 @@
 /* ============================================================
-   Core Design Tokens — Zine / Risograph Style
-   Inspired by: bold outlines, off-white bg, hot pink + cobalt
+   Core Design Tokens — Nautical Watercolour
+   Palette sampled from the artwork in public/images/要用的 and the
+   整體.jpg comp: warm cream ground, rope browns, sailor teal, soft rose.
+   (Replaced the old Zine/Risograph tokens: hard black rules, hot pink,
+   cobalt and offset print shadows.)
    ============================================================ */
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;600;800;900&family=Space+Grotesk:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
 
 :root {
   /* Fonts */
-  --font-display: 'Bebas Neue', 'Impact', sans-serif;
-  --font-main: 'Space Grotesk', 'Outfit', system-ui, sans-serif;
+  --font-display: 'Baloo 2', 'Noto Sans TC', system-ui, sans-serif;
+  --font-main: 'Noto Sans TC', 'Baloo 2', system-ui, sans-serif;
 
-  /* Core Palette — Zine Risograph */
-  --bg:         #EAE6DF;
-  --bg-light:   #F2EEE8;
-  --ink:        #1A1512;
-  --pink:       #E84FA0;
-  --pink-light: #F09CCB;
-  --pink-dark:  #C0307A;
-  --blue:       #2E4FD8;
-  --blue-light: #7B96F4;
-  --blue-dark:  #1A32A8;
-  --white:      #FAFAF8;
-  --cream:      #F5F0E8;
+  /* Core Palette — sampled from the new art */
+  --bg:         #FFF0E3;  /* page ground, straight out of 整體.jpg */
+  --bg-light:   #FFF7EE;
+  --ink:        #5A4632;  /* warm brown — there is no true black in this art */
+  --ink-soft:   #8A7460;
+  --pink:       #E0879A;  /* mermaid bunny */
+  --pink-light: #F3C7CE;
+  --pink-dark:  #B95F73;
+  --blue:       #2F6B63;  /* the anchor and sailor collars — teal, kept in the blue slot
+                             so every existing rule that reads --blue restyles for free */
+  --blue-light: #8FB3AC;
+  --blue-dark:  #1E4A44;
+  --white:      #FFFCF7;
+  --cream:      #F8EEDF;
+  --sage:       #AFC98A;  /* the green wash behind the rope */
+  --gold:       #C89544;  /* the parchment rule */
+  --rope:       #B08A5E;
 
   /* Functional semantic */
   --score-color:  var(--blue);
   --combo-color:  var(--pink);
-  --hi-color:     #1DA462;
+  --hi-color:     #6E8F4E;
   --timer-color:  var(--ink);
-  --danger-color: #D63030;
-  --warn-color:   #E07020;
+  --danger-color: #C4553E;  /* the starfish coral */
+  --warn-color:   #D08A3C;
 
-  /* Geometry */
-  --border:       3px solid var(--ink);
-  --border-thin:  2px solid var(--ink);
-  --radius:       0px;
+  /* Geometry — soft and rounded now, not hard 3px black rules */
+  --border:       2px solid rgba(90, 70, 50, 0.50);
+  --border-thin:  1.5px solid rgba(90, 70, 50, 0.32);
+  --radius:       14px;
   --radius-pill:  999px;
 
-  /* Shadows (offset hard shadow = print look) */
-  --shadow-sm:  3px 3px 0px var(--ink);
-  --shadow-md:  5px 5px 0px var(--ink);
-  --shadow-lg:  8px 8px 0px var(--ink);
-  --shadow-pink: 5px 5px 0px var(--pink-dark);
-  --shadow-blue: 5px 5px 0px var(--blue-dark);
+  /* Shadows — warm and diffuse, replacing the offset-black print shadows */
+  --shadow-sm:  0 2px 6px rgba(90, 70, 50, 0.13);
+  --shadow-md:  0 4px 14px rgba(90, 70, 50, 0.15);
+  --shadow-lg:  0 10px 26px rgba(90, 70, 50, 0.17);
+  --shadow-pink: 0 4px 14px rgba(185, 95, 115, 0.28);
+  --shadow-blue: 0 4px 14px rgba(30, 74, 68, 0.26);
 }
 
 /* ============================================================
@@ -115,20 +123,6 @@ body::before {
 .logo-text .highlight {
   color: var(--pink);
   -webkit-text-stroke: 0px;
-}
-
-.logo-text .version {
-  font-family: var(--font-main);
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--white);
-  background: var(--ink);
-  padding: 3px 8px;
-  vertical-align: middle;
-  margin-left: 10px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  border-radius: 2px;
 }
 
 .tagline {
@@ -462,7 +456,20 @@ body::before {
   flex-grow: 1;
 }
 
-#webcam { display: none; }
+/* The camera feed paints itself, mirrored, underneath the skeleton canvas.
+   It used to be hidden and redrawn into the canvas every detected frame;
+   letting the browser composite the video directly removes a full-frame
+   drawImage from the hot path. Both boxes are 4:3 and use the same
+   object-fit, so the skeleton still lines up with the hand. */
+#webcam {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+  z-index: 0;
+}
 
 #game-canvas {
   position: absolute;
@@ -1072,24 +1079,41 @@ input:checked + .slider:before {
 }
 
 /* ============================================================
-   Item-dropping Ship
+   Item-dropping Ships — main ship + trailing escort
    ============================================================ */
-#game-ship {
+.game-ship {
   /* Floats on the page top layer, free to overflow the game frame */
   position: fixed;
   top: -400px; /* offscreen until the first teleport positions it */
   left: 50%;
-  width: 384px;
-  height: 336px;
   transform: translateX(-50%);
   z-index: 60; /* above the game frame, below modals (100) */
   pointer-events: none;
   animation: ship-bob 2.6s ease-in-out infinite;
 }
 
+/* Main ship — box matches the 833x900 artwork so it fills without letterboxing */
+#game-ship {
+  width: 312px;
+  height: 336px;
+}
+
+/* Escort — smaller (it flies further away), and bobs out of sync with the main
+   ship so the pair doesn't look welded together */
+#game-ship-sub {
+  width: 154px;
+  height: 116px;
+  z-index: 59; /* tucks behind the main ship where the two overlap */
+  animation: ship-bob 3.1s ease-in-out infinite 0.4s;
+}
+
 /* Teleport arrival flicker */
-#game-ship.blink {
+.game-ship.blink {
   animation: ship-blink 0.35s steps(3, end) both, ship-bob 2.6s ease-in-out infinite;
+}
+
+#game-ship-sub.blink {
+  animation: ship-blink 0.35s steps(3, end) both, ship-bob 3.1s ease-in-out infinite 0.4s;
 }
 
 @keyframes ship-blink {
@@ -1099,96 +1123,25 @@ input:checked + .slider:before {
   100% { opacity: 1; }
 }
 
-/* ============================================================
-   Theme Mascot (A/B/C) — sits in the bottom-right corner
-   ============================================================ */
-#game-mascot {
-  position: absolute;
-  right: 14px;
-  bottom: 14px;
-  width: 225px;
-  height: 225px;
-  z-index: 3;
-  pointer-events: none;
-  transform-origin: bottom center;
-  animation: mascot-bob 1.3s ease-in-out infinite;
-}
-
-/* Random speech bubble beside the mascot */
-#mascot-bubble {
-  position: absolute;
-  right: 200px;
-  bottom: 180px;
-  max-width: 160px;
-  background: var(--white);
-  border: var(--border-thin);
-  box-shadow: var(--shadow-sm);
-  border-radius: 12px;
-  padding: 8px 12px;
-  font-family: var(--font-main);
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--ink);
-  line-height: 1.3;
-  z-index: 4;
-  pointer-events: none;
-  opacity: 0;
-  transform: translateY(6px) scale(0.85);
-  transform-origin: bottom right;
-  transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-#mascot-bubble.show {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-
-/* little tail pointing toward the mascot (down-right) */
-#mascot-bubble::after {
-  content: '';
-  position: absolute;
-  right: 22px;
-  bottom: -9px;
-  width: 14px;
-  height: 14px;
-  background: var(--white);
-  border-right: var(--border-thin);
-  border-bottom: var(--border-thin);
-  transform: rotate(35deg);
-}
-
-#game-mascot img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  filter: drop-shadow(3px 4px 0 rgba(0,0,0,0.4));
-}
-
-/* Idle bounce */
-@keyframes mascot-bob {
-  0%, 100% { transform: translateY(0) rotate(-2deg); }
-  50%      { transform: translateY(-12px) rotate(2deg); }
-}
-
-/* Throw jolt when a treasure is summoned (open hand) */
-#game-mascot.throw {
-  animation: mascot-throw 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
-             mascot-bob 1.3s ease-in-out infinite;
-}
-
-@keyframes mascot-throw {
-  0%   { transform: translateY(0) scale(1, 1) rotate(0deg); }
-  30%  { transform: translateY(4px) scale(1.15, 0.85) rotate(-6deg); }
-  60%  { transform: translateY(-18px) scale(0.9, 1.12) rotate(8deg); }
-  100% { transform: translateY(0) scale(1, 1) rotate(0deg); }
-}
-
-#game-ship img,
-#game-ship svg {
+.game-ship img,
+.game-ship svg {
   width: 100%;
   height: 100%;
   object-fit: contain;
   filter: drop-shadow(2px 3px 0 rgba(0,0,0,0.45));
+}
+
+/* Recoil kick on whichever ship just let an item go.
+   Rides on the inner art so it can't clash with the bob/blink on the wrapper. */
+.game-ship.drop img,
+.game-ship.drop svg {
+  animation: ship-drop 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes ship-drop {
+  0%   { transform: translateY(0) scale(1, 1); }
+  35%  { transform: translateY(5px) scale(1.04, 0.94); }
+  100% { transform: translateY(0) scale(1, 1); }
 }
 
 @keyframes ship-bob {
@@ -1670,3 +1623,624 @@ input:checked + .slider:before {
   75%  { transform: scale(1.0);  opacity: 1; }
   100% { transform: scale(0.7);  opacity: 0; }
 }
+
+/* ============================================================
+   NAUTICAL SKIN — the 整體.jpg comp, built from public/images/
+   frame-center / panel-parchment / crew-stack / seal-stamp
+   ------------------------------------------------------------
+   Skin only: no markup changed. Every hook below is an existing
+   class or an ::before/::after on one. Most of the recolouring
+   already fell out of the token swap at the top of this file;
+   what follows is the artwork plus the places that hard-coded
+   the old zine look (black rules, square corners, offset shadows).
+   ============================================================ */
+
+/* ---- page ground ------------------------------------------- */
+body::before { opacity: 0.45; }   /* grain was tuned against the darker zine bg */
+
+/* ---- header ------------------------------------------------- */
+.game-header { border-bottom: 2px dashed rgba(90, 70, 50, 0.30); }
+
+.logo-text { letter-spacing: 1px; font-weight: 800; }
+.logo-text .highlight { color: var(--pink); }
+.tagline { opacity: 0.6; letter-spacing: 1px; }
+
+.settings-btn {
+  border: var(--border);
+  border-radius: 50%;
+  background: var(--white);
+}
+.settings-btn:hover  { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.settings-btn:active { transform: translateY(1px);  box-shadow: var(--shadow-sm); }
+
+/* ---- panels ------------------------------------------------- */
+.panel {
+  border-radius: var(--radius);
+  background: var(--white);
+}
+.panel::before { display: none; }          /* the hard pink corner square */
+.panel-header  { border-bottom: 2px dashed rgba(90, 70, 50, 0.28); }
+.panel-dot     { background: var(--gold); border: 2px solid rgba(90, 70, 50, 0.45); }
+.panel-right .panel-dot { background: var(--blue); }
+.panel-header h2 { font-weight: 700; letter-spacing: 1px; }
+
+/* ---- left HUD: the gold parchment card ---------------------- */
+/* border-image keeps the painted corners crisp instead of stretching them */
+#stats-panel {
+  background: none;
+  box-shadow: none;
+  border: 24px solid transparent;
+  border-image: url('public/images/panel-parchment.webp') 44 fill / 24px / 0 stretch;
+  border-radius: 0;
+  padding: 10px 14px;
+  overflow: visible;
+}
+#stats-panel .panel-header { border-bottom-color: rgba(200, 149, 68, 0.55); }
+
+/* the parchment already frames the panel, so drop the full-bleed high score */
+#stats-panel #high-score-box {
+  margin: auto 0 0 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+}
+#stats-panel .stat-box,
+#stats-panel .game-timer-container { border-radius: 10px; }
+
+/* a wax seal stamped onto the corner of the card */
+#stats-panel::after {
+  content: '';
+  position: absolute;
+  right: -22px;
+  bottom: -18px;
+  width: 78px;
+  height: 75px;
+  background: url('public/images/seal-stamp.webp') center / contain no-repeat;
+  pointer-events: none;
+  z-index: 4;
+  filter: drop-shadow(0 2px 4px rgba(90, 70, 50, 0.25));
+}
+
+/* ---- centre: the rope frame --------------------------------- */
+.game-screen-wrapper {
+  border: none;
+  box-shadow: none;
+  background-color: var(--cream);
+  border-radius: 18px;
+}
+
+/* The frame art sits ON TOP of the camera, the way the comp draws it —
+   its rope loops are meant to overlap the play area, and the middle of the
+   webp is fully transparent so the feed reads through. pointer-events:none
+   keeps the start / game-over buttons underneath clickable. */
+.game-screen-wrapper::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('public/images/frame-center.webp') center / 100% 100% no-repeat;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.game-screen { border-radius: 14px; }
+
+/* the gesture-reactive glow, softened to a wash inside the rope */
+.screen-border-effect { border: none; box-shadow: none; border-radius: 14px; }
+.game-screen-wrapper.gesture-open .screen-border-effect {
+  box-shadow: inset 0 0 40px rgba(110, 143, 78, 0.28);
+}
+.game-screen-wrapper.gesture-fist .screen-border-effect {
+  box-shadow: inset 0 0 40px rgba(224, 135, 154, 0.35);
+}
+
+/* ---- right legend: the crew hanging off the rope ------------ */
+#legend-panel { overflow: visible; }
+#legend-panel::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -20px;
+  transform: translateX(-50%);
+  width: 132px;
+  height: 301px;              /* 211x481 artwork, aspect kept */
+  background: url('public/images/crew-stack.webp') bottom center / contain no-repeat;
+  pointer-events: none;
+  z-index: 3;
+  filter: drop-shadow(0 3px 6px rgba(90, 70, 50, 0.20));
+}
+#legend-body { margin-bottom: 286px; }   /* keep the rows clear of the crew */
+
+/* ---- surfaces ------------------------------------------------ */
+.stat-box, .game-timer-container, .legend-row,
+.gesture-status-badge, .control-group .game-log-list {
+  border-radius: 10px;
+}
+.stat-box { border-color: transparent; }
+.stat-box#score-box      { background: var(--blue); }
+.stat-box#combo-box      { background: var(--pink); }
+.stat-box#high-score-box { background: var(--ink); }
+
+.legend-row       { background: var(--bg-light); border-color: rgba(90,70,50,0.22); }
+.legend-row.plus  { border-color: rgba(110,143,78,0.55); background: #F1F5E6; }
+.legend-row.minus { border-color: rgba(196,85,62,0.50); background: #FBEDE8; }
+
+.instruction-bar {
+  background: var(--white);
+  color: var(--ink);
+  border: var(--border);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-sm);
+}
+.console-icon { color: var(--gold); }
+
+/* ---- controls ------------------------------------------------ */
+.btn { border-radius: var(--radius-pill); font-weight: 700; letter-spacing: 1px; }
+.btn:hover  { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.btn:active { transform: translateY(1px);  box-shadow: var(--shadow-sm); }
+
+.cyber-select, .cyber-input { border-radius: 10px; }
+.cyber-select {
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 7L11 1' stroke='%235A4632' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+.cyber-select:focus, .cyber-input:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(200, 149, 68, 0.25);
+}
+
+/* ---- overlays ------------------------------------------------ */
+.overlay { background: rgba(255, 240, 227, 0.94); }
+.welcome-box, .game-over-box, .leaderboard-box, #config-panel {
+  border-radius: var(--radius);
+}
+
+/* ---- falling loot -------------------------------------------- */
+/* the neon-* class names stay (app.js writes them); only the hues move */
+.neon-svg-cyan   { color: var(--blue); }
+.neon-svg-pink   { color: var(--pink); }
+.neon-svg-green  { color: var(--hi-color); }
+.neon-svg-yellow { color: var(--gold); }
+
+.falling-item { filter: drop-shadow(1px 2px 2px rgba(90, 70, 50, 0.35)); }
+.falling-item.bomb, .falling-item.bonus {
+  filter: drop-shadow(1px 2px 2px rgba(90, 70, 50, 0.35));
+}
+
+/* ---- contrast fixes after the palette swap ------------------ */
+/* these three were written white/near-black against surfaces that
+   used to be dark; the new cream surfaces left them unreadable */
+.terminal-text { color: var(--ink); opacity: 0.85; }
+.stat-box .stat-label { color: rgba(255, 255, 255, 0.92) !important; }
+.lb-empty, .log-empty { color: rgba(90, 70, 50, 0.55); }
+
+/* ---- legend card: a quieter sibling to the parchment -------- */
+#legend-panel {
+  background: var(--cream);
+  border: 2px dashed rgba(200, 149, 68, 0.55);
+  box-shadow: var(--shadow-sm);
+  padding: 16px 14px;
+}
+#legend-panel .panel-header { border-bottom-color: rgba(200, 149, 68, 0.45); }
+#legend-panel::after {
+  width: 152px;
+  height: 347px;
+  bottom: -12px;
+}
+#legend-body { margin-bottom: 300px; gap: 7px; }
+.legend-row { background: var(--white); }
+
+/* ---- header ------------------------------------------------- */
+.logo-text { line-height: 1; }
+.game-header { padding-bottom: 10px; }
+
+/* ---- ships sit inside the scene, behind the rope ------------ */
+/* The frame overlay paints at z-index 20; the ships were at 60, so the
+   airship was landing on top of the rope instead of flying inside it. */
+.game-ship { z-index: 19; }
+#game-ship-sub { z-index: 18; }
+
+#legend-body { margin-bottom: 312px; }
+
+/* ============================================================
+   LAYOUT PASS — three columns, tops aligned
+   Left  : parchment at its true 250:456 aspect, stats layered on top,
+           high score broken out below with the seal beside it
+   Centre: frame art mapped by its PAINTED box so no video peeks out
+   Right : the crew illustration only
+   ============================================================ */
+.game-grid {
+  grid-template-columns: 300px minmax(0, 900px) 296px;
+  align-items: start;      /* each block keeps its own height; tops line up */
+}
+
+/* ---- LEFT ---------------------------------------------------- */
+/* aspect-ratio matches the artwork exactly, so background-size:100% 100%
+   paints it with zero distortion — no stretching, content fits the frame */
+#stats-panel {
+  aspect-ratio: 250 / 456;
+  height: auto;
+  border: none;
+  border-image: none;
+  background: url('public/images/panel-parchment.webp') center / 100% 100% no-repeat;
+  padding: 34px 30px 28px;
+  gap: 10px;
+  overflow: visible;
+}
+#stats-panel .panel-header { padding-bottom: 8px; }
+#stats-panel .stat-box { padding: 8px 14px; }
+#stats-panel .stat-value { font-size: 2.6rem; }
+#stats-panel .timer-display { font-size: 2.4rem; }
+#stats-panel .game-timer-container { margin-bottom: 0; padding: 10px 14px; }
+
+/* high score leaves the parchment: its own dark bar under the card */
+#stats-panel #high-score-box {
+  position: absolute;
+  left: 0;
+  width: 172px;
+  top: calc(100% + 16px);
+  height: 112px;
+  margin: 0;
+  padding: 0 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  background: var(--ink);
+  border: none;
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+#stats-panel #high-score-box .stat-value { font-size: 2.6rem; }
+
+/* the seal sits beside it, bigger, level with the bar */
+#stats-panel::after {
+  right: 0;
+  left: auto;
+  top: calc(100% + 20px);
+  bottom: auto;
+  width: 108px;
+  height: 103px;            /* 114x109 artwork, aspect kept */
+}
+
+/* ---- CENTRE -------------------------------------------------- */
+/* The frame webp has a 53px (6.7%) empty gutter down its RIGHT edge, which is
+   why the video was showing past the rope on that side. Map the art's painted
+   box onto the wrapper instead of its canvas, with ~1% bleed so nothing peeks
+   through at any rounding. #game-viewport keeps its own overflow:hidden, so
+   letting the wrapper overflow is safe. */
+.game-screen-wrapper { overflow: visible; }
+.game-screen-wrapper::after { inset: -2.1% -8.3% -3.2% -1.7%; }
+
+/* ---- RIGHT --------------------------------------------------- */
+/* legend rows dropped — the column is just the crew now */
+#legend-panel {
+  aspect-ratio: 211 / 481;   /* 296 wide -> 675 tall, level with the game frame */
+  height: auto;
+  background: url('public/images/crew-stack.webp') center / 100% 100% no-repeat;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  filter: drop-shadow(0 4px 8px rgba(90, 70, 50, 0.18));
+}
+#legend-panel .panel-header,
+#legend-panel #legend-body { display: none; }
+#legend-panel::after { display: none; }
+
+/* ---- parchment breathing room ------------------------------- */
+/* the gold rule is ~16px at this scale and the corner flecks reach ~54px,
+   so the content box has to start inside that, not on top of it */
+#stats-panel { padding: 48px 36px 44px; }
+#stats-panel .panel-body { justify-content: space-evenly; gap: 14px; }
+
+/* ---- keep the three blocks locked together at any width ------ */
+/* Fixed px columns only line up while the centre can hold its full 900px.
+   Below ~1570px wide the centre was getting squeezed while the side blocks
+   stayed put, so the bottoms drifted apart. fr ratios make all three shrink
+   together; the max-width stops the centre growing past its 900px cap. */
+.game-grid {
+  grid-template-columns: 300fr 900fr 296fr;
+  max-width: 1528px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* the bottom block is sized off the parchment's own height so it scales too
+   (547px tall at the 300px design width: 16px gap = 2.93%, 112px bar = 20.5%) */
+#stats-panel #high-score-box {
+  top: 102.93%;
+  height: 20.48%;
+  width: 57.33%;
+}
+#stats-panel::after {
+  top: 103.66%;
+  height: 18.83%;
+  width: 36%;
+}
+
+/* ============================================================
+   RIGHT COLUMN — score + timer on top, crew below
+   ============================================================ */
+/* The column's own 296:675 ratio keeps it level with the 4:3 game frame at
+   any width, so the crew no longer needs a hard-coded height — it just takes
+   whatever is left under the two readouts and scales to fit. */
+#legend-panel {
+  aspect-ratio: 296 / 675;
+  background: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 0;
+  filter: none;
+}
+
+#legend-panel #score-box,
+#legend-panel .game-timer-container {
+  flex: 0 0 auto;
+  border: none;
+  border-radius: 14px;
+  padding: 12px 18px;
+  box-shadow: var(--shadow-sm);
+}
+#legend-panel .game-timer-container {
+  background: var(--white);
+  margin-bottom: 0;
+}
+#legend-panel .stat-value  { font-size: 2.8rem; }
+#legend-panel .timer-display { font-size: 2.6rem; margin: 2px 0; }
+
+/* the crew now lives on #legend-body — contain keeps it in proportion,
+   renderLegend() can keep writing rows into it, they just stay hidden */
+#legend-body {
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  background: url('public/images/crew-stack.webp') center bottom / contain no-repeat;
+  filter: drop-shadow(0 4px 8px rgba(90, 70, 50, 0.18));
+}
+#legend-body > * { display: none; }
+
+/* ---- LEFT column after the move ----------------------------- */
+/* only COMBO is left on the parchment, so centre it rather than leaving it
+   floating at the top of an otherwise empty card */
+#stats-panel .panel-body { justify-content: center; }
+#stats-panel #combo-box { padding: 14px 18px; }
+#stats-panel #combo-box .stat-value { font-size: 3.2rem; }
+
+/* the earlier layout pass hid this with a 2-ID selector, so match that weight */
+#legend-panel #legend-body {
+  display: block;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+}
+
+/* ---- score is back on the parchment, timer stays on the right ---- */
+#stats-panel .panel-body { justify-content: space-evenly; }
+#stats-panel #combo-box .stat-value { font-size: 2.8rem; }
+#stats-panel #score-box,
+#stats-panel #combo-box { padding: 12px 18px; }
+
+/* the crew gets the room the score box used to take */
+#legend-panel .game-timer-container { flex: 0 0 auto; }
+
+/* ============================================================
+   Admin record panel — daily log, deletable per row / per day
+   ============================================================ */
+#admin-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(255, 240, 227, 0.90);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 110;            /* above the settings panel it is opened from */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+#admin-modal.active { opacity: 1; pointer-events: auto; }
+
+.admin-box {
+  background: var(--white);
+  border: var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  width: 560px;
+  max-width: 94vw;
+  max-height: 86vh;
+  padding: 24px 26px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transform: scale(0.94) translateY(10px);
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+#admin-modal.active .admin-box { transform: scale(1) translateY(0); }
+
+.admin-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 2px dashed rgba(200, 149, 68, 0.5);
+}
+.admin-title {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: 1px;
+}
+.admin-summary {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: rgba(90, 70, 50, 0.7);
+  margin-top: 2px;
+}
+
+/* the scrolling part — everything else in the box stays put */
+.admin-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-right: 4px;
+}
+
+.admin-empty {
+  text-align: center;
+  padding: 30px 0;
+  color: rgba(90, 70, 50, 0.55);
+  font-weight: 600;
+}
+
+.admin-day { display: flex; flex-direction: column; gap: 5px; }
+
+.admin-day-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: var(--cream);
+  border-radius: 9px;
+  position: sticky;   /* the date stays visible while its rows scroll past */
+  top: 0;
+  z-index: 1;
+}
+.admin-day-date { font-weight: 700; font-size: 0.88rem; color: var(--ink); }
+.admin-day-meta {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(90, 70, 50, 0.6);
+  margin-right: auto;
+}
+.admin-day-del {
+  font-family: var(--font-main);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--danger-color);
+  background: none;
+  border: 1.5px solid rgba(196, 85, 62, 0.45);
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.admin-day-del:hover { background: var(--danger-color); color: var(--white); }
+
+.admin-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(90, 70, 50, 0.12);
+  font-size: 0.82rem;
+}
+.admin-row:last-child { border-bottom: none; }
+.admin-row:hover { background: var(--bg-light); border-radius: 8px; }
+
+.admin-time  { font-weight: 700; color: var(--ink); width: 46px; flex-shrink: 0; }
+.admin-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: rgba(90, 70, 50, 0.72);
+  background: var(--bg);
+  border-radius: var(--radius-pill);
+  padding: 2px 9px;
+  flex-shrink: 0;
+}
+.admin-score {
+  margin-left: auto;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--blue);
+  letter-spacing: 1px;
+}
+.admin-del {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  line-height: 1;
+  color: rgba(90, 70, 50, 0.45);
+  background: none;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.admin-del:hover { background: var(--danger-color); color: var(--white); }
+
+.admin-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding-top: 14px;
+  border-top: 2px dashed rgba(200, 149, 68, 0.5);
+}
+.admin-actions .btn { padding: 10px 20px; font-size: 0.95rem; }
+#btn-admin-clear { border-color: rgba(196, 85, 62, 0.6); color: var(--danger-color); }
+#btn-admin-clear:hover { background: var(--danger-color); color: var(--white); }
+
+/* ---- pull the two readouts up the parchment ----------------- */
+/* space-evenly was pushing a 79px hole between them; sit them near the
+   top instead and let the empty room fall at the bottom of the card */
+#stats-panel .panel-body {
+  justify-content: flex-start;
+  gap: 26px;
+  padding-top: 24px;   /* keeps the score box off the HUD STATS rule */
+}
+
+/* ============================================================
+   Wordmark — Aerocatch 飛船秘寶
+   ============================================================ */
+/* the old logo was uppercased for the Bebas Neue cyber look; Baloo 2 in
+   title case reads softer and matches the watercolour art */
+.logo-text {
+  text-transform: none;
+  letter-spacing: 0;
+  /* NOT flex: a gap here would also split Aero | catch, which is one word */
+  white-space: nowrap;
+}
+
+/* the small Chinese name riding after the wordmark */
+.logo-sub {
+  font-family: var(--font-main);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: var(--ink);
+  opacity: 0.62;
+  margin-left: 14px;
+  vertical-align: baseline;
+}
+
+/* ---- start-overlay wordmark --------------------------------- */
+/* 6px letter-spacing on a 3rem display face made "Aerocatch 飛船秘寶"
+   overrun the welcome box and wrap mid-name */
+.welcome-box .neon-text,
+.game-over-box .neon-text-red {
+  letter-spacing: 1px;
+  line-height: 1.05;
+  text-transform: none;
+}
+.welcome-sub {
+  display: block;
+  font-family: var(--font-main);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 6px;
+  color: var(--ink);
+  opacity: 0.6;
+  margin-top: 4px;
+}
+
+.game-over-box .welcome-sub { color: var(--danger-color); opacity: 0.75; }
