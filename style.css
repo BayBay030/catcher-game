@@ -2252,3 +2252,22 @@ body::before { opacity: 0.45; }   /* grain was tuned against the darker zine bg 
 }
 
 .game-over-box .welcome-sub { color: var(--danger-color); opacity: 0.75; }
+
+/* ============================================================
+   Perf HUD — press P
+   Deliberately plain: it is a measuring tool, not part of the show.
+   ============================================================ */
+#perf-hud {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 50;              /* above the start / game-over overlays, below the modals */
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #7CFFB2;
+  font: 600 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  white-space: nowrap;
+}

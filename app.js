@@ -801,6 +801,12 @@ function setupEventListeners() {
       e.preventDefault();
       resetTracking();
     }
+    // P toggles the perf readout — but not while a select or field has focus,
+    // where a keystroke belongs to the control rather than to the page.
+    if ((e.key === 'p' || e.key === 'P') && !e.ctrlKey && !e.metaKey && !e.altKey &&
+        !/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement && document.activeElement.tagName)) {
+      togglePerfHud();
+    }
   });
   // Leaderboard buttons
   document.getElementById('btn-leaderboard').addEventListener('click', openLeaderboard);
@@ -1096,6 +1102,45 @@ function cameraSettingsLabel() {
   return `${st.width || '?'}x${st.height || '?'} @ ${fps}`;
 }
 
+/* ============================================================
+   Perf HUD — press P
+   ------------------------------------------------------------
+   Exists so "is it smoother in Chrome / in the Electron build?" can be
+   answered with a number instead of a feeling. Off during a show, and
+   free while off: two integer adds per frame, and the DOM is touched
+   twice a second rather than every frame.
+   ============================================================ */
+let perfHudOn = false;
+let perfHudEl = null;
+let perfFrames = 0, perfDetections = 0, perfInferenceMs = 0, perfWindowStart = 0;
+
+function togglePerfHud() {
+  perfHudOn = !perfHudOn;
+  if (!perfHudEl) perfHudEl = document.getElementById('perf-hud');
+  perfHudEl.hidden = !perfHudOn;
+  perfHudEl.textContent = '量測中...';
+  perfFrames = perfDetections = perfInferenceMs = 0;
+  perfWindowStart = performance.now();
+  updateSystemConsole(perfHudOn ? '效能監看已開啟（再按 P 關閉）' : '效能監看已關閉');
+}
+
+// One call per rendered frame; rolls the counters up into a reading twice a second.
+function perfTick(now) {
+  if (!perfHudOn) return;
+  perfFrames++;
+  const elapsed = now - perfWindowStart;
+  if (elapsed < 500) return;
+  const fps = (perfFrames * 1000) / elapsed;
+  const hz = (perfDetections * 1000) / elapsed;
+  const avg = perfDetections ? perfInferenceMs / perfDetections : 0;
+  // Inference ms is the number that actually separates one browser engine from
+  // another; fps only tells you whether it is already starving the renderer.
+  perfHudEl.textContent =
+    `${fps.toFixed(0)} fps · 辨識 ${hz.toFixed(0)}Hz · 推論 ${avg.toFixed(1)}ms · ${cameraSettingsLabel()}`;
+  perfFrames = perfDetections = perfInferenceMs = 0;
+  perfWindowStart = now;
+}
+
 // A settings / leaderboard / admin panel covers the whole viewport, so nobody
 // can be playing while one is open. Hand detection is by far the most expensive
 // thing on the page — running it at 30Hz behind a panel is pure waste, and the
@@ -1113,12 +1158,17 @@ async function processVideoFrame() {
     if (!isOverlayPanelOpen() && !isProcessingFrame && handsInstance && now - lastDetectTime >= DETECT_INTERVAL_MS) {
       lastDetectTime = now;
       isProcessingFrame = true;
+      const inferStart = perfHudOn ? performance.now() : 0;
       try {
         await handsInstance.send({ image: videoElement });
       } catch (err) {
         console.error("MediaPipe prediction error: ", err);
       }
       isProcessingFrame = false;
+      if (perfHudOn) {
+        perfDetections++;
+        perfInferenceMs += performance.now() - inferStart;
+      }
     }
     requestAnimationFrame(processVideoFrame);
   }
@@ -1248,6 +1298,7 @@ function startGameLoop() {
 
 function gameFrame(now) {
   gameRafId = requestAnimationFrame(gameFrame);
+  perfTick(now);
 
   // Seconds since the last painted frame. Clamped so a backgrounded tab or a
   // long GC pause can't teleport every item down the screen in one step.
