@@ -7,6 +7,17 @@ HOST="127.0.0.1"
 PORT="${PORT:-5173}"
 URL="http://${HOST}:${PORT}/index.html"
 
+# 用哪個瀏覽器開啟（預設 Safari）。要換成別的： BROWSER_APP="Google Chrome" ./open-dev.command
+BROWSER_APP="${BROWSER_APP:-Safari}"
+
+open_url() {
+  if open -a "${BROWSER_APP}" "${URL}" 2>/dev/null; then
+    return 0
+  fi
+  echo "找不到 ${BROWSER_APP}，改用系統預設瀏覽器開啟。"
+  open "${URL}"
+}
+
 if ! command -v python3 >/dev/null 2>&1; then
   echo "python3 is required to start the local development server."
   echo "Install Python 3, then run this command again."
@@ -16,7 +27,7 @@ fi
 
 if lsof -PiTCP:"${PORT}" -sTCP:LISTEN -t >/dev/null 2>&1; then
   echo "A server is already running on ${URL}"
-  open "${URL}"
+  open_url
   read -r -p "Press Enter to close..."
   exit 0
 fi
@@ -33,7 +44,7 @@ cleanup() {
 trap cleanup EXIT
 
 sleep 1
-open "${URL}"
+open_url
 
 echo
 echo "Development server is running."
