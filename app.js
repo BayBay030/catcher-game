@@ -770,6 +770,8 @@ function setupEventListeners() {
   const camSelect = document.getElementById('camera-select');
   camSelect.addEventListener('change', (e) => {
     if (e.target.value) {
+      // An explicit pick beats the label guess from here on
+      try { localStorage.setItem(CAMERA_PREF_KEY, e.target.value); } catch { /* private mode */ }
       updateSystemConsole(`切換相機來源中...`);
       startCameraStream(e.target.value);
     }
@@ -939,12 +941,48 @@ function formatScore(num) {
   return String(num).padStart(4, '0');
 }
 
+/* ============================================================
+   Camera preference
+   ------------------------------------------------------------
+   The rig runs on an external webcam pointed at the play area; the Mac's own
+   FaceTime camera points at whoever is driving the laptop and is never the one
+   you want. enumerateDevices() has no "is this built in?" flag, so the label is
+   the only clue — rank on it, and let an explicit pick in the settings panel
+   override the guess and survive a reload.
+   ============================================================ */
+const CAMERA_PREF_KEY = 'cybergrab_camera_id';
+
+const BUILTIN_CAMERA_RE = /facetime|built[\s-]?in|internal|內建|内建|內置/i;
+const VIRTUAL_CAMERA_RE = /virtual|obs|snap|camo|iphone|ipad|continuity|desk view|連續互通/i;
+
+// Lower rank wins.
+function cameraRank(device) {
+  const label = device.label || '';
+  if (BUILTIN_CAMERA_RE.test(label)) return 2;  // last resort: the Mac's own camera
+  if (VIRTUAL_CAMERA_RE.test(label)) return 1;  // Continuity / OBS: real, but not the rig
+  return 0;                                     // a plugged-in USB webcam
+}
+
+// A saved choice wins as long as that camera is still plugged in. Safari can
+// hand out fresh deviceIds between sessions, so the label ranking is the one
+// that has to be right on a cold boot.
+function pickPreferredCamera(videoDevices) {
+  let saved = null;
+  try { saved = localStorage.getItem(CAMERA_PREF_KEY); } catch { /* private mode */ }
+  if (saved && videoDevices.some(d => d.deviceId === saved)) return saved;
+  return videoDevices.reduce((best, d) => (cameraRank(d) < cameraRank(best) ? d : best)).deviceId;
+}
+
 // Load Video Camera list
 async function loadCameraDevices() {
   const camSelect = document.getElementById('camera-select');
   try {
-    // Request permission first to get device labels
-    await navigator.mediaDevices.getUserMedia({ video: true });
+    // Permission first, or enumerateDevices() returns every label as '' and the
+    // external-camera ranking has nothing to work with. Release the probe right
+    // away: left running it pins a second camera open for the whole session
+    // (recording light stuck on, device possibly unavailable to the real stream).
+    const probe = await navigator.mediaDevices.getUserMedia({ video: true });
+    probe.getTracks().forEach(track => track.stop());
     
     const devices = await navigator.mediaDevices.enumerateDevices();
     const videoDevices = devices.filter(device => device.kind === 'videoinput');
@@ -964,9 +1002,10 @@ async function loadCameraDevices() {
       camSelect.appendChild(option);
     });
 
-    // Select the first device and open stream
-    const defaultCam = videoDevices[0].deviceId;
+    // Default to the external camera, not whatever the OS happens to list first
+    const defaultCam = pickPreferredCamera(videoDevices);
     camSelect.value = defaultCam;
+    updateSystemConsole(`使用相機：${camSelect.options[camSelect.selectedIndex].text}`);
     startCameraStream(defaultCam);
 
   } catch (err) {
@@ -1057,13 +1096,21 @@ function cameraSettingsLabel() {
   return `${st.width || '?'}x${st.height || '?'} @ ${fps}`;
 }
 
+// A settings / leaderboard / admin panel covers the whole viewport, so nobody
+// can be playing while one is open. Hand detection is by far the most expensive
+// thing on the page — running it at 30Hz behind a panel is pure waste, and the
+// repaints it causes are what made opening the settings panel stall on Safari.
+function isOverlayPanelOpen() {
+  return !!document.querySelector('#settings-modal.active, #leaderboard-modal.active, #admin-modal.active');
+}
+
 // Core processing loops for camera frames to MediaPipe
 async function processVideoFrame() {
   if (activeStream && !videoElement.paused && !videoElement.ended) {
     const now = performance.now();
     // Interval is measured start-to-start: if inference itself takes longer than
     // the budget it simply runs back-to-back, guarded by isProcessingFrame.
-    if (!isProcessingFrame && handsInstance && now - lastDetectTime >= DETECT_INTERVAL_MS) {
+    if (!isOverlayPanelOpen() && !isProcessingFrame && handsInstance && now - lastDetectTime >= DETECT_INTERVAL_MS) {
       lastDetectTime = now;
       isProcessingFrame = true;
       try {

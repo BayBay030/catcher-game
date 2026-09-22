@@ -486,9 +486,11 @@ body::before {
 .overlay {
   position: absolute;
   inset: 0;
-  background: rgba(234, 230, 223, 0.92);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  /* No backdrop-filter here: these panels sit over the LIVE camera feed, so a
+     blurred backdrop has to be recomputed on every video frame and every canvas
+     repaint. On Safari that alone is enough to stall the whole page. At this
+     opacity the blur was barely visible anyway. */
+  background: rgba(234, 230, 223, 0.96);
   z-index: 5;
   display: flex;
   justify-content: center;
@@ -1271,9 +1273,11 @@ input:checked + .slider:before {
 #settings-modal {
   position: fixed;
   inset: 0;
-  background: rgba(234,230,223,0.88);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  /* No backdrop-filter here: these panels sit over the LIVE camera feed, so a
+     blurred backdrop has to be recomputed on every video frame and every canvas
+     repaint. On Safari that alone is enough to stall the whole page. At this
+     opacity the blur was barely visible anyway. */
+  background: rgba(234,230,223,0.95);
   z-index: 100;
   display: flex;
   justify-content: center;
@@ -1329,9 +1333,11 @@ input:checked + .slider:before {
 #leaderboard-modal {
   position: fixed;
   inset: 0;
-  background: rgba(234,230,223,0.88);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  /* No backdrop-filter here: these panels sit over the LIVE camera feed, so a
+     blurred backdrop has to be recomputed on every video frame and every canvas
+     repaint. On Safari that alone is enough to stall the whole page. At this
+     opacity the blur was barely visible anyway. */
+  background: rgba(234,230,223,0.95);
   z-index: 100;
   display: flex;
   justify-content: center;
@@ -2028,9 +2034,11 @@ body::before { opacity: 0.45; }   /* grain was tuned against the darker zine bg 
 #admin-modal {
   position: fixed;
   inset: 0;
-  background: rgba(255, 240, 227, 0.90);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  /* No backdrop-filter here: these panels sit over the LIVE camera feed, so a
+     blurred backdrop has to be recomputed on every video frame and every canvas
+     repaint. On Safari that alone is enough to stall the whole page. At this
+     opacity the blur was barely visible anyway. */
+  background: rgba(255, 240, 227, 0.96);
   z-index: 110;            /* above the settings panel it is opened from */
   display: flex;
   justify-content: center;
