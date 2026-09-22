@@ -7,14 +7,19 @@ HOST="127.0.0.1"
 PORT="${PORT:-5173}"
 URL="http://${HOST}:${PORT}/index.html"
 
-# 用哪個瀏覽器開啟（預設 Safari）。要換成別的： BROWSER_APP="Google Chrome" ./open-dev.command
-BROWSER_APP="${BROWSER_APP:-Safari}"
-
+# 這個遊戲跑的是 MediaPipe 手勢辨識，Chromium 的 WASM SIMD / WebGL 路徑比
+# Safari 快上不少，所以預設開 Chrome，Safari 只是備援。
+# 要指定其他瀏覽器： BROWSER_APP="Safari" ./open-dev.command
 open_url() {
-  if open -a "${BROWSER_APP}" "${URL}" 2>/dev/null; then
-    return 0
-  fi
-  echo "找不到 ${BROWSER_APP}，改用系統預設瀏覽器開啟。"
+  # 明確指定的優先，其餘依序退讓
+  for app in ${BROWSER_APP:+"$BROWSER_APP"} "Google Chrome" "Safari"; do
+    if open -a "$app" "${URL}" 2>/dev/null; then
+      echo "已用 $app 開啟。"
+      return 0
+    fi
+    echo "找不到 $app，換下一個。"
+  done
+  echo "改用系統預設瀏覽器開啟。"
   open "${URL}"
 }
 
