@@ -739,12 +739,10 @@ function setupEventListeners() {
     startGame();
   });
 
-  // Restart Button
-  document.getElementById('btn-restart').addEventListener('click', () => {
-    // Hide game over screen, reset game
-    document.getElementById('game-over-overlay').classList.remove('active');
-    startGame();
-  });
+  // Restart goes back to the welcome screen rather than straight into a round.
+  // At an event the next player is usually a different person who has never
+  // seen the gestures, so the instruction cards need to come back up.
+  document.getElementById('btn-restart').addEventListener('click', showStartScreen);
 
   // Difficulty change
   const diffSelect = document.getElementById('difficulty-select');
@@ -805,6 +803,11 @@ function setupEventListeners() {
     if ((e.key === 'p' || e.key === 'P') && !e.ctrlKey && !e.metaKey && !e.altKey &&
         !/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement && document.activeElement.tagName)) {
       togglePerfHud();
+    }
+    // Enter sets sail from the welcome screen, so nobody has to find the mouse.
+    if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.altKey && canStartFromKeyboard()) {
+      e.preventDefault();
+      startGame();
     }
   });
   // Leaderboard buttons
@@ -1528,6 +1531,31 @@ function runCountdown(onComplete) {
   }
 
   showStep();
+}
+
+// Back to the welcome screen with its instruction cards. Used by the game-over
+// button instead of restarting outright.
+function showStartScreen() {
+  isPlaying = false;
+  clearFallingItems();
+  document.getElementById('game-over-overlay').classList.remove('active');
+  document.getElementById('start-overlay').classList.add('active');
+  // The button that was just clicked keeps focus otherwise, and the next Enter
+  // would re-fire it from behind the hidden overlay instead of starting a round.
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  updateSystemConsole('回到說明畫面，按 Enter 或點「出航囉」開始。');
+}
+
+// Enter is only a start key while the welcome screen is the thing on screen:
+// not mid-round, not during the countdown, not behind a settings panel, and not
+// while a control has focus and wants the keystroke for itself.
+function canStartFromKeyboard() {
+  if (isPlaying || isOverlayPanelOpen()) return false;
+  if (!document.getElementById('start-overlay').classList.contains('active')) return false;
+  if (document.getElementById('countdown-overlay').classList.contains('active')) return false;
+  const el = document.activeElement;
+  if (el && /^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(el.tagName)) return false;
+  return true;
 }
 
 // Start Game Play

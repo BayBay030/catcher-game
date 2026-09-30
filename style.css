@@ -2276,3 +2276,27 @@ body::before { opacity: 0.45; }   /* grain was tuned against the darker zine bg 
   pointer-events: none;
   white-space: nowrap;
 }
+
+/* ============================================================
+   Welcome screen keyboard hint
+   The Enter shortcut is only useful if players know it is there.
+   ============================================================ */
+.start-hint {
+  margin: 12px 0 0;
+  text-align: center;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft, #7a6a58);
+  opacity: 0.85;
+}
+
+.start-hint kbd {
+  display: inline-block;
+  padding: 2px 8px;
+  margin: 0 2px;
+  border: 1.5px solid currentColor;
+  border-radius: 5px;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.4;
+}
