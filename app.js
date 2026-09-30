@@ -424,9 +424,6 @@ let lastCatchTime = 0;
 let difficulty = 'medium'; // easy, medium, hard (default: medium)
 let spawnRate = 800; // ms between spawns
 let baseGravity = 2.8; // falling speed multiplier (matches 'medium')
-// Theme C: fixed GIF asset (the old custom-URL slot, now a preset)
-let customGifUrl = "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbnlhMDMxeTZnaTZsMDkwYWYxajR5MDd6Nmp2MGptNDJxb3ZtbWh3MCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/WNJ06H3d1kH6Gj7G6B/giphy.gif";
-
 // Video & Drawing Canvas variables
 let videoElement;
 let canvasElement;
@@ -1177,7 +1174,8 @@ async function processVideoFrame() {
 // Initialize MediaPipe Hands model
 function initMediaPipe() {
   handsInstance = new Hands({
-    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+    // Local copy — see the note in index.html. Nothing here touches the network.
+    locateFile: (file) => `public/vendor/mediapipe/hands/${file}`
   });
 
   handsInstance.setOptions({

@@ -5,12 +5,17 @@
    (Replaced the old Zine/Risograph tokens: hard black rules, hot pink,
    cobalt and offset print shadows.)
    ============================================================ */
-@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+/* Fonts are linked from index.html (public/vendor/fonts/fonts.css) — this file
+   used to repeat the same Google Fonts request a second time. */
 
 :root {
   /* Fonts */
-  --font-display: 'Baloo 2', 'Noto Sans TC', system-ui, sans-serif;
-  --font-main: 'Noto Sans TC', 'Baloo 2', system-ui, sans-serif;
+  /* Baloo 2 is bundled (public/vendor/fonts/). Traditional Chinese is not: the
+     Noto Sans TC subsets run to ~16MB, and PingFang TC ships with every macOS,
+     so the CJK text falls through to it. 'Noto Sans TC' stays first in the
+     stack so bundling it later needs no change here. */
+  --font-display: 'Baloo 2', 'Noto Sans TC', 'PingFang TC', 'Heiti TC', system-ui, sans-serif;
+  --font-main: 'Noto Sans TC', 'PingFang TC', 'Heiti TC', 'Baloo 2', system-ui, sans-serif;
 
   /* Core Palette — sampled from the new art */
   --bg:         #FFF0E3;  /* page ground, straight out of 整體.jpg */

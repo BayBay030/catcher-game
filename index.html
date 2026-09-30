@@ -10,13 +10,17 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✊</text></svg>">
   
   <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <!-- Fonts ship with the repo; nothing is fetched from fonts.googleapis.com. -->
+  <link rel="stylesheet" href="public/vendor/fonts/fonts.css">
   
   <!-- MediaPipe CDNs -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <!-- MediaPipe is served from the repo, not a CDN: the show has to come up on a
+       venue network that may be slow or absent, and a missing model file means no
+       hand tracking at all, not a degraded look. Pinned copy in
+       public/vendor/mediapipe/hands/ (see VERSION there).
+       @mediapipe/camera_utils used to be loaded here too and was never used —
+       app.js drives its own requestAnimationFrame loop. -->
+  <script src="public/vendor/mediapipe/hands/hands.js"></script>
   
   <!-- ?v= 版本號：改檔案時順手加 1，瀏覽器就不會吃到舊快取 -->
   <link rel="stylesheet" href="style.css?v=39">
