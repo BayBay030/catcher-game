@@ -421,9 +421,11 @@ const COMBO_DURATION = 1500; // 1.5s to keep combo
 let lastCatchTime = 0;
 
 // Game Configs
-let difficulty = 'medium'; // easy, medium, hard (default: medium)
-let spawnRate = 800; // ms between spawns
-let baseGravity = 2.8; // falling speed multiplier (matches 'medium')
+let difficulty = 'hard'; // easy, medium, hard (default: hard)
+// adjustDifficultySettings() overwrites both on startup; kept in step with the
+// default so the declarations aren't quietly describing a different difficulty.
+let spawnRate = 267; // ms between spawns (matches 'hard')
+let baseGravity = 4.2; // falling speed multiplier (matches 'hard')
 // Video & Drawing Canvas variables
 let videoElement;
 let canvasElement;
