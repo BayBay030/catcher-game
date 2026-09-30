@@ -11,11 +11,13 @@
 :root {
   /* Fonts */
   /* Baloo 2 is bundled (public/vendor/fonts/). Traditional Chinese is not: the
-     Noto Sans TC subsets run to ~16MB, and PingFang TC ships with every macOS,
-     so the CJK text falls through to it. 'Noto Sans TC' stays first in the
-     stack so bundling it later needs no change here. */
-  --font-display: 'Baloo 2', 'Noto Sans TC', 'PingFang TC', 'Heiti TC', system-ui, sans-serif;
-  --font-main: 'Noto Sans TC', 'PingFang TC', 'Heiti TC', 'Baloo 2', system-ui, sans-serif;
+     Noto Sans TC subsets run to ~16MB, so the CJK text falls through to a
+     system face — PingFang TC on macOS, Microsoft JhengHei on Windows. Those
+     two do not look identical, so if the build has to match across both
+     machines, bundle Noto Sans TC; 'Noto Sans TC' stays first in the stack so
+     that needs no change here. */
+  --font-display: 'Baloo 2', 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', 'Heiti TC', system-ui, sans-serif;
+  --font-main: 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', 'Heiti TC', 'Baloo 2', system-ui, sans-serif;
 
   /* Core Palette — sampled from the new art */
   --bg:         #FFF0E3;  /* page ground, straight out of 整體.jpg */

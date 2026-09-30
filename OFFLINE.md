@@ -56,9 +56,17 @@ performance.getEntriesByType('resource')
 
 Baloo 2，可變字體，4 個 woff2 檔涵蓋全部字重。
 
-**繁體中文沒有打包** —— Noto Sans TC 的子集檔加起來約 16 MB（420 個檔）。
-macOS 內建 PingFang TC，所以中文字走系統字體（見 `style.css` 的 `--font-main`）。
-如果要跟線上版一模一樣，得把那 16 MB 也收進來。
+**繁體中文沒有打包** —— Noto Sans TC 的子集檔加起來約 16 MB（420 個檔），
+所以中文字走系統字體（見 `style.css` 的 `--font-main`）：
+
+| 系統 | 實際用到的中文字體 |
+|---|---|
+| macOS | PingFang TC（內建） |
+| Windows | Microsoft JhengHei 微軟正黑體（內建） |
+
+兩者外觀**不完全相同**。如果之後要讓 Mac 和 Windows 上長得一樣，
+就得把那 16 MB 的 Noto Sans TC 收進 `public/vendor/fonts/`。
+`--font-main` 已經把 `'Noto Sans TC'` 留在第一順位，加了不用改 CSS。
 
 ## 改動時要注意
 
