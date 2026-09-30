@@ -774,7 +774,9 @@ function setupEventListeners() {
     }
   });
 
-  // Manual calibrate / reset — same action from the header and from settings
+  // Camera recalibration. This is the operator's tool — it drops and reopens the
+  // video stream, which blanks the picture for a second or two — so it stays in
+  // the settings panel, away from players.
   const resetTracking = () => {
     updateSystemConsole("重新校準手勢辨識與影像流...");
     synth.playTone(200, 'sine', 0.1, 0.05);
@@ -788,15 +790,23 @@ function setupEventListeners() {
     if (currentCam) startCameraStream(currentCam);
   };
   document.getElementById('btn-calibrate').addEventListener('click', resetTracking);
-  document.getElementById('btn-reset').addEventListener('click', resetTracking);
 
-  // F5 resets the camera instead of reloading the page. A real reload re-fetches
-  // the MediaPipe model from the CDN and costs seconds — not something you want
-  // to trigger by reflex mid-event. Cmd/Ctrl+R still does a full reload.
+  // The header icon is what people reach for between players, so it hands the
+  // machine to the next one rather than restarting the camera: back to the
+  // welcome screen from whatever was happening. It deliberately leaves the video
+  // stream alone — reopening that mid-queue is exactly the pause you don't want.
+  const nextPlayer = () => {
+    synth.playTone(200, 'sine', 0.1, 0.05);
+    showStartScreen('已回到開始畫面，換下一位玩家。');
+  };
+  document.getElementById('btn-reset').addEventListener('click', nextPlayer);
+
+  // F5 does the same, and still never reloads the page: a real reload re-runs
+  // MediaPipe's init and costs seconds. Cmd/Ctrl+R still does a full reload.
   document.addEventListener('keydown', (e) => {
     if (e.key === 'F5' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
       e.preventDefault();
-      resetTracking();
+      nextPlayer();
     }
     // P toggles the perf readout — but not while a select or field has focus,
     // where a keystroke belongs to the control rather than to the page.
@@ -1501,16 +1511,23 @@ function drawCyberSkeleton(landmarks) {
   canvasCtx.restore();
 }
 
+// Bumped whenever a countdown is abandoned. The 3-2-1 runs on a chain of
+// setTimeouts, so without this a countdown interrupted by F5 would keep
+// ticking in the background and start a round over the welcome screen.
+let countdownGeneration = 0;
+
 // Animate the 3-2-1-GO! countdown overlay, then launch game loop
 function runCountdown(onComplete) {
   const overlay = document.getElementById('countdown-overlay');
   const display = document.getElementById('countdown-number');
   const steps = ['3', '2', '1', 'GO!'];
+  const generation = ++countdownGeneration;
   let idx = 0;
 
   overlay.classList.add('active');
 
   function showStep() {
+    if (generation !== countdownGeneration) return;  // superseded
     if (idx >= steps.length) {
       overlay.classList.remove('active');
       display.className = 'countdown-display'; // reset classes
@@ -1533,17 +1550,27 @@ function runCountdown(onComplete) {
   showStep();
 }
 
-// Back to the welcome screen with its instruction cards. Used by the game-over
-// button instead of restarting outright.
-function showStartScreen() {
+// Back to the welcome screen with its instruction cards — the "next player up"
+// action. Reached from the game-over button, the header's reset icon and F5, so
+// it has to be able to abandon a round in progress from any state.
+//
+// Deliberately does NOT go through endGame(): an abandoned round is not a result
+// and has no business in the log or the leaderboard.
+function showStartScreen(message) {
   isPlaying = false;
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  countdownGeneration++;                       // void a countdown still in flight
   clearFallingItems();
+  resetRoundHud();
+
+  document.getElementById('countdown-overlay').classList.remove('active');
   document.getElementById('game-over-overlay').classList.remove('active');
   document.getElementById('start-overlay').classList.add('active');
-  // The button that was just clicked keeps focus otherwise, and the next Enter
-  // would re-fire it from behind the hidden overlay instead of starting a round.
+
+  // Whatever was clicked keeps focus otherwise, and the next Enter would re-fire
+  // that button from behind the hidden overlay instead of starting a round.
   if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-  updateSystemConsole('回到說明畫面，按 Enter 或點「出航囉」開始。');
+  updateSystemConsole(message || '回到說明畫面，按 Enter 或點「出航囉」開始。');
 }
 
 // Enter is only a start key while the welcome screen is the thing on screen:
@@ -1558,9 +1585,9 @@ function canStartFromKeyboard() {
   return true;
 }
 
-// Start Game Play
-function startGame() {
-  // Reset score/ui immediately
+// Score, combo and timer back to their opening values. Shared by startGame and
+// showStartScreen so the welcome screen is a clean slate either way.
+function resetRoundHud() {
   score = 0;
   timer = gameDuration;
   combo = 0;
@@ -1571,7 +1598,11 @@ function startGame() {
   document.getElementById('timer-progress').style.width = '100%';
   document.getElementById('timer-progress').style.backgroundColor = '';
   document.getElementById('game-screen-wrapper').classList.remove('timer-critical');
+}
 
+// Start Game Play
+function startGame() {
+  resetRoundHud();
   clearFallingItems();
 
   // Hide Start/Over overlays
