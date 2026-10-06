@@ -1,7 +1,11 @@
 @echo off
 chcp 65001 >nul
-setlocal enabledelayedexpansion
+REM 先切到自己所在的資料夾，而且一定要在 enabledelayedexpansion「之前」做。
+REM 開了延遲展開之後，路徑裡的驚嘆號會被 cmd 吃掉 —— 例如
+REM 「D:\創世神 World!\gesture-catcher」會變成找不到的「創世神 World」。
 cd /d "%~dp0"
+setlocal enabledelayedexpansion
+
 title Aerocatch 飛船秘寶 - 遊戲伺服器
 
 set "HOST=127.0.0.1"
@@ -13,7 +17,7 @@ echo   Aerocatch 飛船秘寶
 echo   ------------------------------
 echo.
 
-REM 找「真的跑得起來」的 Python。
+REM 先找 Python。它的 http.server 比較快，有就優先用。
 REM 只檢查檔案在不在是不夠的：Windows 上常常留著 py.exe 卻沒裝任何 Python
 REM 版本，而 python.exe 可能是微軟商店的空捷徑，一執行只會跳出商店。
 REM 所以這裡直接叫它跑一行程式，跑得過才算數。
@@ -23,17 +27,22 @@ if not defined PY (
   python -c "import sys" >nul 2>&1 && set "PY=python"
 )
 
-if not defined PY (
-  echo   [問題] 這台電腦沒有可以用的 Python，伺服器起不來。
+set "MODE="
+if defined PY (
+  set "MODE=python"
+) else (
+  REM 沒有 Python 也沒關係，用 Windows 自己內建的 PowerShell 當伺服器。
+  if exist "server.ps1" set "MODE=powershell"
+)
+
+if not defined MODE (
+  echo   [問題] 找不到 Python，而且 server.ps1 也不在這個資料夾裡。
   echo.
-  echo   到 https://www.python.org/downloads/ 下載安裝，
-  echo   安裝畫面第一頁記得勾「Add python.exe to PATH」，
-  echo   裝完再點一次這個檔案。
+  echo   請重新完整下載一份遊戲，不要只複製部分檔案。
   echo.
   pause
   exit /b 1
 )
-echo   Python 檢查通過：%PY%
 
 REM 已經有伺服器在跑就不要再開一個（結尾空格很重要，不然 8734 會誤判成 87340）
 netstat -an | findstr /c:"%HOST%:%PORT% " | findstr /i "LISTENING" >nul 2>&1
@@ -45,15 +54,22 @@ if not errorlevel 1 (
   exit /b 0
 )
 
-echo   正在啟動伺服器...
+REM 伺服器視窗故意不最小化、也故意留著：萬一它掛了，錯誤訊息要看得見，
+REM 不然只會變成「瀏覽器連不上」而查不出原因。
+if "%MODE%"=="python" (
+  echo   使用 Python 伺服器：!PY!
+  start "aerocatch-server" cmd /k "!PY! -m http.server %PORT% --bind %HOST%"
+) else (
+  echo   這台沒有 Python，改用 Windows 內建的 PowerShell 當伺服器。
+  REM 用 Invoke-Expression 讀進來執行，而不是直接執行 .ps1 檔：
+  REM 有些電腦的資安政策禁止執行 .ps1 檔案，這樣寫可以繞過那個限制。
+  REM ReadAllText 會自動辨識檔案的 BOM，中文註解才不會變亂碼。
+  start "aerocatch-server" powershell -NoProfile -Command "$env:AEROCATCH_PORT='%PORT%'; Invoke-Expression ([System.IO.File]::ReadAllText((Join-Path (Get-Location) 'server.ps1')))"
+)
 
-REM 這個視窗故意不最小化、也故意用 /k 讓它留著：伺服器萬一掛掉，
-REM 錯誤訊息要看得見，不然只會變成「瀏覽器連不上」而查不出原因。
-start "aerocatch-server" cmd /k "%PY% -m http.server %PORT% --bind %HOST%"
-
-REM 等到真的連得上再開瀏覽器，最多等 10 秒。
+REM 等到真的連得上再開瀏覽器，最多等 15 秒。
 set "READY="
-for /l %%i in (1,1,10) do (
+for /l %%i in (1,1,15) do (
   if not defined READY (
     powershell -NoProfile -Command "try{$c=New-Object Net.Sockets.TcpClient;$c.Connect('%HOST%',%PORT%);$c.Close();exit 0}catch{exit 1}" >nul 2>&1
     if not errorlevel 1 (
@@ -71,7 +87,7 @@ if not defined READY (
   echo   旁邊那個標題是 aerocatch-server 的視窗裡會有錯誤訊息，
   echo   那行字就是真正的原因，把它告訴我就能修。
   echo.
-  echo   常見狀況：防毒／資安軟體擋掉本機連線，或這個埠被別的程式佔走。
+  echo   也可以點「環境檢查.bat」，它會把這台電腦的狀況整理成一份報告。
   echo.
   pause
   exit /b 1
