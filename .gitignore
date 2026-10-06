@@ -12,3 +12,6 @@ public/images/*.png
 public/images/要用的/
 *.psd
 整體.jpg
+
+# 環境檢查腳本跑完產生的報告，只對當下那台電腦有意義
+環境檢查結果.txt
